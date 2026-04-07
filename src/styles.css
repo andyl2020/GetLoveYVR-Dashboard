@@ -693,18 +693,16 @@ button {
   flex-wrap: wrap;
 }
 
-.info-chip {
+.countdown-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.35rem;
-  height: 1.35rem;
+  min-height: 1.55rem;
+  padding: 0.22rem 0.56rem;
   border-radius: 999px;
-  border: 1px solid rgba(117, 221, 255, 0.2);
-  background: rgba(117, 221, 255, 0.08);
-  color: var(--cyan);
-  font-size: 0.74rem;
+  font-size: 0.76rem;
   font-weight: 800;
+  line-height: 1;
 }
 
 .output-list {

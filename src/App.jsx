@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { EVENTS, MILESTONE_PLAYBOOK, TODAY, VACATION_BLOCKS } from "./data";
+import { EVENTS, MILESTONE_PLAYBOOK, VACATION_BLOCKS } from "./data";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const OUTPUT_STORAGE_KEY = "getloveyvr-output-progress-v1";
@@ -42,6 +42,10 @@ function dateKey(date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function getTodayKey() {
+  return dateKey(new Date());
 }
 
 function monthKey(value) {
@@ -132,8 +136,8 @@ function buildVacationLookup(blocks) {
   return lookup;
 }
 
-function buildMonthOptions(events) {
-  return [...new Set([monthKey(TODAY), ...events.map((event) => monthKey(event.eventDate))])].sort();
+function buildMonthOptions(events, todayKey) {
+  return [...new Set([monthKey(todayKey), ...events.map((event) => monthKey(event.eventDate))])].sort();
 }
 
 function readOutputState() {
@@ -158,12 +162,12 @@ function outputStateKey(eventId, milestoneType, outputId) {
   return `${eventId}:${milestoneType}:${outputId}`;
 }
 
-function milestoneStatus(dateString, done) {
+function milestoneStatus(dateString, done, todayKey) {
   if (done) {
     return "done";
   }
 
-  const diff = daysBetween(parseDate(dateString), parseDate(TODAY));
+  const diff = daysBetween(parseDate(dateString), parseDate(todayKey));
   if (diff < 0) {
     return "overdue";
   }
@@ -171,6 +175,23 @@ function milestoneStatus(dateString, done) {
     return "urgent";
   }
   return "pending";
+}
+
+function milestoneDeadlineLabel(dateString, done, todayKey) {
+  if (done) {
+    return "Completed";
+  }
+
+  const diff = daysBetween(parseDate(dateString), parseDate(todayKey));
+  if (diff === 0) {
+    return "Due today";
+  }
+  if (diff > 0) {
+    return `${diff} day${diff === 1 ? "" : "s"} left`;
+  }
+
+  const overdueDays = Math.abs(diff);
+  return `${overdueDays} day${overdueDays === 1 ? "" : "s"} overdue`;
 }
 
 function eventCode(event) {
@@ -231,15 +252,7 @@ function resolveMilestones(event, outputState) {
   });
 }
 
-function buildMilestoneTooltip(milestone) {
-  return [
-    `${milestone.label} - ${milestone.timing}`,
-    milestone.summary,
-    `Required outputs: ${milestone.outputs.map((output) => output.label).join("; ")}`,
-  ].join("\n");
-}
-
-function buildEventModels(events, vacationLookup, outputState) {
+function buildEventModels(events, vacationLookup, outputState, todayKey) {
   return [...events]
     .sort((left, right) => left.eventDate.localeCompare(right.eventDate))
     .map((event) => {
@@ -247,13 +260,14 @@ function buildEventModels(events, vacationLookup, outputState) {
       const issues = [];
       const ownerVacationDays = vacationLookup[event.owner] ?? new Set();
       const overdueMilestones = milestones.filter(
-        (milestone) => !milestone.done && milestoneStatus(milestone.date, milestone.done) === "overdue",
+        (milestone) =>
+          !milestone.done && milestoneStatus(milestone.date, milestone.done, todayKey) === "overdue",
       );
       const nextMilestone = milestones.find((milestone) => !milestone.done) ?? null;
       const vacationConflicts = milestones.filter(
         (milestone) => !milestone.done && ownerVacationDays.has(milestone.date),
       );
-      const daysUntilEvent = daysBetween(parseDate(event.eventDate), parseDate(TODAY));
+      const daysUntilEvent = daysBetween(parseDate(event.eventDate), parseDate(todayKey));
 
       if (overdueMilestones.length > 0) {
         issues.push({
@@ -277,7 +291,7 @@ function buildEventModels(events, vacationLookup, outputState) {
         });
       }
 
-      if (nextMilestone && milestoneStatus(nextMilestone.date, nextMilestone.done) === "urgent") {
+      if (nextMilestone && milestoneStatus(nextMilestone.date, nextMilestone.done, todayKey) === "urgent") {
         issues.push({
           severity: "warning",
           label: "Due soon",
@@ -339,7 +353,8 @@ function toneForEvent(event) {
 }
 
 export default function App() {
-  const [selectedMonth, setSelectedMonth] = useState(monthKey(TODAY));
+  const [todayKey, setTodayKey] = useState(() => getTodayKey());
+  const [selectedMonth, setSelectedMonth] = useState(() => monthKey(getTodayKey()));
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [outputState, setOutputState] = useState(() => readOutputState());
   const [filters, setFilters] = useState({
@@ -349,9 +364,9 @@ export default function App() {
     issuesOnly: false,
   });
 
-  const monthOptions = buildMonthOptions(EVENTS);
+  const monthOptions = buildMonthOptions(EVENTS, todayKey);
   const vacationLookup = buildVacationLookup(VACATION_BLOCKS);
-  const eventModels = buildEventModels(EVENTS, vacationLookup, outputState);
+  const eventModels = buildEventModels(EVENTS, vacationLookup, outputState, todayKey);
   const visibleEvents = eventModels.filter((event) => {
     if (!filters.sandy && event.owner === "Sandy") {
       return false;
@@ -397,6 +412,18 @@ export default function App() {
       setSelectedEventId(candidates[0]?.id ?? null);
     }
   }, [monthEvents, selectedEventId, visibleEvents]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setTodayKey(getTodayKey());
+    }, 60 * 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -455,7 +482,7 @@ export default function App() {
           </p>
         </div>
         <div className="header-meta">
-          <span>{formatDayLabel(TODAY)}</span>
+          <span>{formatDayLabel(todayKey)}</span>
           <span>{visibleEvents.length} visible events</span>
           <span>{alerts.length === 0 ? "All clear" : `${alerts.length} alerts`}</span>
         </div>
@@ -583,7 +610,7 @@ export default function App() {
             {calendarCells.map((cell) => {
               const dayEvents = monthEvents.filter((event) => event.eventDate === cell.date);
               const selectedDay = selectedEvent?.eventDate === cell.date;
-              const today = cell.date === TODAY;
+              const today = cell.date === todayKey;
 
               return (
                 <div
@@ -707,7 +734,7 @@ export default function App() {
                   </p>
                   <div className="milestone-list">
                     {selectedEvent.milestones.map((milestone) => {
-                      const status = milestoneStatus(milestone.date, milestone.done);
+                      const status = milestoneStatus(milestone.date, milestone.done, todayKey);
                       const conflict =
                         selectedEvent.owner !== "TBD" &&
                         vacationLookup[selectedEvent.owner]?.has(milestone.date);
@@ -720,12 +747,8 @@ export default function App() {
                               <div className="milestone-subline">
                                 <span>{milestone.timing}</span>
                                 <span>{formatShortDate(milestone.date)}</span>
-                                <span
-                                  className="info-chip"
-                                  title={buildMilestoneTooltip(milestone)}
-                                  aria-label={`About ${milestone.label}`}
-                                >
-                                  ?
+                                <span className={`countdown-chip tone-${STATUS_META[status].tone}`}>
+                                  {milestoneDeadlineLabel(milestone.date, milestone.done, todayKey)}
                                 </span>
                               </div>
                             </div>
