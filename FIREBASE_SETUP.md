@@ -1,0 +1,118 @@
+# Firebase Setup
+
+This dashboard is set up for:
+
+- Public read access for anyone with the URL
+- Email-link sign-in for editors
+- Shared checklist state stored in Firestore
+- Write access limited to the email(s) you allow
+
+## 1. Create the Firebase project
+
+1. Open the Firebase console:
+   https://console.firebase.google.com/
+2. Click `Create a project`
+3. Name it something like `GetLoveYVR Dashboard`
+4. You can leave Google Analytics off for this project
+
+## 2. Add the web app
+
+1. Inside the Firebase project, click the web icon `</>`
+2. App nickname: `GetLoveYVR Dashboard`
+3. Click `Register app`
+4. Firebase will show a config object
+5. Keep that tab open because you will copy those values into `.env`
+
+## 3. Turn on Firestore
+
+1. In the left sidebar, click `Firestore Database`
+2. Click `Create database`
+3. Choose `Production mode`
+4. Pick a region close to you
+5. Finish setup
+
+## 4. Turn on email-link sign-in
+
+1. In the left sidebar, click `Authentication`
+2. Click `Get started` if needed
+3. Open the `Sign-in method` tab
+4. Enable `Email/Password`
+5. Turn on `Email link (passwordless sign-in)`
+6. Save
+
+## 5. Add allowed domains
+
+In `Authentication` -> `Settings` -> `Authorized domains`, make sure these are present:
+
+- `localhost`
+- `127.0.0.1`
+- `andyl2020.github.io`
+
+## 6. Create your local `.env`
+
+1. In the project root, copy `.env.example` to `.env`
+2. Fill in the values from Firebase
+
+Example:
+
+```env
+VITE_FIREBASE_API_KEY=...
+VITE_FIREBASE_AUTH_DOMAIN=...
+VITE_FIREBASE_PROJECT_ID=...
+VITE_FIREBASE_STORAGE_BUCKET=...
+VITE_FIREBASE_MESSAGING_SENDER_ID=...
+VITE_FIREBASE_APP_ID=...
+VITE_FIREBASE_EDITOR_EMAILS=aluu.life@gmail.com
+VITE_FIREBASE_DASHBOARD_COLLECTION=dashboard
+VITE_FIREBASE_DASHBOARD_DOCUMENT=shared-state
+```
+
+## 7. Add Firestore rules
+
+Open `Firestore Database` -> `Rules` and replace the default rules with:
+
+```js
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /dashboard/{docId} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ["aluu.life@gmail.com"];
+    }
+  }
+}
+```
+
+If you later want more editors, add their emails inside the array.
+
+If you change `VITE_FIREBASE_DASHBOARD_COLLECTION`, update the rules path too.
+
+## 8. Test locally
+
+Run:
+
+```bash
+npm run dev
+```
+
+Expected behavior:
+
+- Anyone can open the dashboard and see the saved state
+- Viewers stay read-only
+- Andy signs in with an emailed link to edit
+- Changes sync across devices because Firestore stores the shared state
+
+## 9. Deploy
+
+Push to `main`. GitHub Pages will rebuild automatically.
+
+## What Codex can do next
+
+Once your Firebase project is created, send me:
+
+- the values for your `.env`
+- whether the editor email should stay `aluu.life@gmail.com`
+
+Then I can finish any remaining setup, test the auth flow, and polish the editor/viewer experience.

@@ -1,8 +1,22 @@
 import { useEffect, useState } from "react";
 import { EVENTS, MILESTONE_PLAYBOOK, VACATION_BLOCKS } from "./data";
+import {
+  canEditEmail,
+  completeEditorSignIn,
+  getEditorEmails,
+  getPendingEmail,
+  isEmailLinkFlow,
+  isFirebaseEnabled,
+  saveSharedState,
+  sendEditorSignInLink,
+  signOutEditor,
+  subscribeToAuthState,
+  subscribeToSharedState,
+} from "./firebaseSync";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const OUTPUT_STORAGE_KEY = "getloveyvr-output-progress-v1";
+const FALLBACK_EDITOR_EMAIL = getEditorEmails()[0] ?? "";
 
 const FILTER_OPTIONS = [
   { id: "sandy", label: "Sandy events", tone: "rose" },
@@ -140,6 +154,16 @@ function buildMonthOptions(events, todayKey) {
   return [...new Set([monthKey(todayKey), ...events.map((event) => monthKey(event.eventDate))])].sort();
 }
 
+function normalizeStoredOutputState(rawState) {
+  if (!rawState || typeof rawState !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(rawState).map(([key, value]) => [key.replace(/:/g, "__"), Boolean(value)]),
+  );
+}
+
 function readOutputState() {
   if (typeof window === "undefined") {
     return {};
@@ -152,14 +176,14 @@ function readOutputState() {
     }
 
     const parsed = JSON.parse(stored);
-    return parsed && typeof parsed === "object" ? parsed : {};
+    return normalizeStoredOutputState(parsed);
   } catch {
     return {};
   }
 }
 
 function outputStateKey(eventId, milestoneType, outputId) {
-  return `${eventId}:${milestoneType}:${outputId}`;
+  return `${eventId}__${milestoneType}__${outputId}`;
 }
 
 function milestoneStatus(dateString, done, todayKey) {
@@ -352,17 +376,57 @@ function toneForEvent(event) {
   return `tone-${SEVERITY_META[event.severity].tone}`;
 }
 
+function syncTone(mode) {
+  if (mode === "cloud") {
+    return "tone-info";
+  }
+  if (mode === "saving") {
+    return "tone-warning";
+  }
+  if (mode === "connecting") {
+    return "tone-neutral";
+  }
+  return "tone-warning";
+}
+
+function syncLabel(mode) {
+  if (mode === "cloud") {
+    return "Cloud sync live";
+  }
+  if (mode === "saving") {
+    return "Saving";
+  }
+  if (mode === "connecting") {
+    return "Connecting";
+  }
+  return "Local only";
+}
+
 export default function App() {
+  const firebaseEnabled = isFirebaseEnabled();
   const [todayKey, setTodayKey] = useState(() => getTodayKey());
   const [selectedMonth, setSelectedMonth] = useState(() => monthKey(getTodayKey()));
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [outputState, setOutputState] = useState(() => readOutputState());
+  const [currentUser, setCurrentUser] = useState(null);
+  const [signInEmail, setSignInEmail] = useState(() => getPendingEmail() || FALLBACK_EDITOR_EMAIL);
+  const [authReady, setAuthReady] = useState(() => !firebaseEnabled);
+  const [authError, setAuthError] = useState("");
+  const [authNotice, setAuthNotice] = useState("");
+  const [syncError, setSyncError] = useState("");
+  const [syncMode, setSyncMode] = useState(() => (firebaseEnabled ? "connecting" : "local"));
+  const [sharedDocExists, setSharedDocExists] = useState(() => !firebaseEnabled);
+  const [isSendingLink, setIsSendingLink] = useState(false);
+  const [isCompletingSignIn, setIsCompletingSignIn] = useState(false);
   const [filters, setFilters] = useState({
     sandy: true,
     patrice: true,
     vacations: true,
     issuesOnly: false,
   });
+  const emailLinkFlow = firebaseEnabled && isEmailLinkFlow();
+  const editorEmail = currentUser?.email?.trim().toLowerCase() ?? "";
+  const canEdit = firebaseEnabled ? canEditEmail(editorEmail) : true;
 
   const monthOptions = buildMonthOptions(EVENTS, todayKey);
   const vacationLookup = buildVacationLookup(VACATION_BLOCKS);
@@ -433,6 +497,94 @@ export default function App() {
     window.localStorage.setItem(OUTPUT_STORAGE_KEY, JSON.stringify(outputState));
   }, [outputState]);
 
+  useEffect(() => {
+    if (!firebaseEnabled) {
+      return () => {};
+    }
+
+    return subscribeToAuthState((user) => {
+      setCurrentUser(user);
+      setAuthReady(true);
+      if (!user) {
+        return;
+      }
+
+      setAuthError("");
+      setAuthNotice(
+        canEditEmail(user.email)
+          ? `Editing is enabled for ${user.email}.`
+          : `${user.email} is signed in, but still read-only.`,
+      );
+    });
+  }, [firebaseEnabled]);
+
+  useEffect(() => {
+    if (!firebaseEnabled) {
+      return () => {};
+    }
+
+    return subscribeToSharedState(
+      (data) => {
+        if (data?.outputState && typeof data.outputState === "object") {
+          setOutputState(normalizeStoredOutputState(data.outputState));
+          setSharedDocExists(true);
+        } else {
+          setSharedDocExists(Boolean(data));
+        }
+
+        setSyncError("");
+        setSyncMode("cloud");
+      },
+      (error) => {
+        setSyncMode("local");
+        setSyncError(error?.message || "Cloud sync is unavailable right now.");
+      },
+    );
+  }, [firebaseEnabled]);
+
+  useEffect(() => {
+    if (!firebaseEnabled || !emailLinkFlow) {
+      return;
+    }
+
+    const pendingEmail = getPendingEmail();
+    if (!pendingEmail) {
+      return;
+    }
+
+    setIsCompletingSignIn(true);
+    completeEditorSignIn(pendingEmail)
+      .then(() => {
+        setAuthError("");
+        setAuthNotice(`Signed in as ${pendingEmail}.`);
+      })
+      .catch((error) => {
+        setAuthError(error?.message || "Could not finish sign-in from the email link.");
+      })
+      .finally(() => {
+        setIsCompletingSignIn(false);
+      });
+  }, [emailLinkFlow, firebaseEnabled]);
+
+  useEffect(() => {
+    if (!firebaseEnabled || !canEdit || !currentUser?.email || sharedDocExists) {
+      return;
+    }
+
+    if (Object.keys(outputState).length === 0) {
+      return;
+    }
+
+    saveSharedState(outputState, currentUser.email)
+      .then(() => {
+        setSharedDocExists(true);
+        setSyncMode("cloud");
+      })
+      .catch((error) => {
+        setSyncError(error?.message || "Could not seed cloud state.");
+      });
+  }, [canEdit, currentUser, firebaseEnabled, outputState, sharedDocExists]);
+
   function focusEvent(eventId, eventDate) {
     setSelectedMonth(monthKey(eventDate));
     setSelectedEventId(eventId);
@@ -454,17 +606,82 @@ export default function App() {
     }
   }
 
-  function toggleOutput(eventId, milestoneType, outputId) {
+  async function toggleOutput(eventId, milestoneType, outputId) {
+    if (firebaseEnabled && !canEdit) {
+      setAuthError("Sign in with an approved editor email to change checklist state.");
+      return;
+    }
+
     const stateKey = outputStateKey(eventId, milestoneType, outputId);
     const event = EVENTS.find((item) => item.id === eventId);
     const milestone = event?.milestones.find((item) => item.type === milestoneType);
     const output = milestone?.outputs.find((item) => item.id === outputId);
     const fallbackValue = output?.done ?? false;
+    const previousState = outputState;
+    const nextState = {
+      ...outputState,
+      [stateKey]: !(outputState[stateKey] ?? fallbackValue),
+    };
 
-    setOutputState((current) => ({
-      ...current,
-      [stateKey]: !(current[stateKey] ?? fallbackValue),
-    }));
+    setOutputState(nextState);
+    setAuthError("");
+
+    if (!firebaseEnabled) {
+      return;
+    }
+
+    try {
+      setSyncMode("saving");
+      await saveSharedState(nextState, currentUser?.email ?? signInEmail);
+      setSharedDocExists(true);
+      setSyncMode("cloud");
+    } catch (error) {
+      setOutputState(previousState);
+      setSyncMode("cloud");
+      setSyncError(error?.message || "Could not save checklist changes.");
+    }
+  }
+
+  async function handleSendSignInLink(event) {
+    event.preventDefault();
+    setIsSendingLink(true);
+    setAuthError("");
+    setAuthNotice("");
+
+    try {
+      await sendEditorSignInLink(signInEmail);
+      setAuthNotice(`Sign-in link sent to ${signInEmail}. Open it on any device to edit.`);
+    } catch (error) {
+      setAuthError(error?.message || "Could not send the sign-in link.");
+    } finally {
+      setIsSendingLink(false);
+    }
+  }
+
+  async function handleCompleteSignIn(event) {
+    event.preventDefault();
+    setIsCompletingSignIn(true);
+    setAuthError("");
+
+    try {
+      const user = await completeEditorSignIn(signInEmail);
+      if (user?.email) {
+        setAuthNotice(`Signed in as ${user.email}.`);
+      }
+    } catch (error) {
+      setAuthError(error?.message || "Could not complete sign-in.");
+    } finally {
+      setIsCompletingSignIn(false);
+    }
+  }
+
+  async function handleSignOut() {
+    try {
+      await signOutEditor();
+      setAuthNotice("Signed out. The dashboard is now read-only.");
+    } catch (error) {
+      setAuthError(error?.message || "Could not sign out.");
+    }
   }
 
   return (
@@ -487,6 +704,106 @@ export default function App() {
           <span>{alerts.length === 0 ? "All clear" : `${alerts.length} alerts`}</span>
         </div>
       </div>
+
+      <section className="sync-panel">
+        <div>
+          <div className="eyebrow">{firebaseEnabled ? "Sharing & access" : "Sync setup"}</div>
+          <h2>
+            {firebaseEnabled ? "Public view, editor-only changes" : "Cloud sync not configured yet"}
+          </h2>
+          <p>
+            {firebaseEnabled
+              ? "Anyone with the URL can view the dashboard. Only approved editor emails can change checklist state."
+              : "The dashboard still works right now, but checklist updates only save in this browser until Firebase is configured."}
+          </p>
+          {authNotice && <p className="sync-feedback">{authNotice}</p>}
+          {authError && <p className="sync-feedback sync-feedback-error">{authError}</p>}
+          {syncError && <p className="sync-feedback sync-feedback-error">{syncError}</p>}
+        </div>
+
+        <div className="sync-card">
+          <div className="sync-card-topline">
+            <span className={`pill ${syncTone(syncMode)}`}>{syncLabel(syncMode)}</span>
+            <span className="pill tone-neutral">
+              {firebaseEnabled
+                ? currentUser?.email || (authReady ? "Viewer mode" : "Checking session")
+                : "Browser-only storage"}
+            </span>
+          </div>
+
+          {firebaseEnabled ? (
+            authReady ? (
+              currentUser ? (
+                <>
+                  <p className="sync-card-copy">
+                    {canEdit
+                      ? "This signed-in email can edit the shared checklist state from any device."
+                      : "This signed-in email can view the cloud state but cannot edit it."}
+                  </p>
+                  <div className="auth-actions">
+                    <span className={`pill ${canEdit ? "tone-positive" : "tone-neutral"}`}>
+                      {canEdit ? "Editing enabled" : "Read only"}
+                    </span>
+                    <button type="button" className="auth-button" onClick={handleSignOut}>
+                      Sign out
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <form
+                  className="auth-form"
+                  onSubmit={emailLinkFlow ? handleCompleteSignIn : handleSendSignInLink}
+                >
+                  <label className="auth-label" htmlFor="editor-email">
+                    Editor email
+                  </label>
+                  <input
+                    id="editor-email"
+                    className="auth-input"
+                    type="email"
+                    value={signInEmail}
+                    onChange={(event) => setSignInEmail(event.target.value)}
+                    placeholder={FALLBACK_EDITOR_EMAIL || "your@email.com"}
+                    autoComplete="email"
+                  />
+                  <div className="auth-actions">
+                    <button
+                      type="submit"
+                      className="auth-button auth-button-primary"
+                      disabled={isSendingLink || isCompletingSignIn}
+                    >
+                      {emailLinkFlow
+                        ? isCompletingSignIn
+                          ? "Finishing..."
+                          : "Finish sign-in"
+                        : isSendingLink
+                          ? "Sending..."
+                          : "Email me a sign-in link"}
+                    </button>
+                  </div>
+                  <p className="sync-card-copy">
+                    Viewers do not need to sign in. Editors sign in by email link only when
+                    they need to change checklist state.
+                  </p>
+                </form>
+              )
+            ) : (
+              <p className="sync-card-copy">Checking your sign-in session...</p>
+            )
+          ) : (
+            <>
+              <p className="sync-card-copy">
+                Add your Firebase config later and this panel will switch the dashboard into
+                shared cloud sync with public view and editor-only writes.
+              </p>
+              <div className="auth-actions">
+                <span className="pill tone-warning">Needs Firebase config</span>
+                <span className="pill tone-neutral">See FIREBASE_SETUP.md</span>
+              </div>
+            </>
+          )}
+        </div>
+      </section>
 
       <section className="alert-strip">
         {alerts.length === 0 ? (
@@ -731,6 +1048,7 @@ export default function App() {
                   <p className="milestone-section-note">
                     Each milestone has a definition, timing rule, and required outputs.
                     A step only turns done when every output below is checked off.
+                    {firebaseEnabled && !canEdit ? " Sign in with an approved editor email to make changes." : ""}
                   </p>
                   <div className="milestone-list">
                     {selectedEvent.milestones.map((milestone) => {
@@ -769,11 +1087,18 @@ export default function App() {
                             {milestone.outputs.map((output) => (
                               <label
                                 key={output.id}
-                                className={output.done ? "output-item done" : "output-item"}
+                                className={[
+                                  "output-item",
+                                  output.done ? "done" : "",
+                                  firebaseEnabled && !canEdit ? "locked" : "",
+                                ]
+                                  .filter(Boolean)
+                                  .join(" ")}
                               >
                                 <input
                                   type="checkbox"
                                   checked={output.done}
+                                  disabled={firebaseEnabled && !canEdit}
                                   onChange={() =>
                                     toggleOutput(selectedEvent.id, milestone.type, output.id)
                                   }

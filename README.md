@@ -21,3 +21,9 @@ npm install
 npm run dev
 npm run build
 ```
+
+## Firebase Sync
+
+- Copy `.env.example` to `.env` when your Firebase project is ready.
+- Follow the step-by-step setup guide in `FIREBASE_SETUP.md`.
+- The dashboard is wired for public read access plus editor-only writes via Firebase email-link auth.
