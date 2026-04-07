@@ -52,6 +52,7 @@ In `Authentication` -> `Settings` -> `Authorized domains`, make sure these are p
 
 1. In the project root, copy `.env.example` to `.env`
 2. Fill in the values from Firebase
+3. If you want GitHub Pages to use the same config, also copy `.env` to `.env.production`
 
 Example:
 
@@ -107,6 +108,11 @@ Expected behavior:
 ## 9. Deploy
 
 Push to `main`. GitHub Pages will rebuild automatically.
+
+Note:
+
+- This repo keeps `.env.production` checked in so the public GitHub Pages build can access the Firebase web config.
+- That Firebase web config is safe to expose in a client app. Security comes from Firebase Auth and Firestore rules, not from hiding these values.
 
 ## What Codex can do next
 

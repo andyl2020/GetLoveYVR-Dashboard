@@ -25,5 +25,6 @@ npm run build
 ## Firebase Sync
 
 - Copy `.env.example` to `.env` when your Firebase project is ready.
+- Keep `.env.production` in sync with `.env` for GitHub Pages builds.
 - Follow the step-by-step setup guide in `FIREBASE_SETUP.md`.
 - The dashboard is wired for public read access plus editor-only writes via Firebase Google sign-in.

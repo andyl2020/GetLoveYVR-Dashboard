@@ -15,9 +15,17 @@ const firebaseConfig = {
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-const firebaseEnabled = Object.values(firebaseConfig).every(Boolean);
+const firebaseEnabled = [
+  firebaseConfig.apiKey,
+  firebaseConfig.authDomain,
+  firebaseConfig.projectId,
+  firebaseConfig.storageBucket,
+  firebaseConfig.messagingSenderId,
+  firebaseConfig.appId,
+].every(Boolean);
 const editorEmails = parseEditorEmails(import.meta.env.VITE_FIREBASE_EDITOR_EMAILS ?? "");
 const dashboardCollection = import.meta.env.VITE_FIREBASE_DASHBOARD_COLLECTION ?? "dashboard";
 const dashboardDocument = import.meta.env.VITE_FIREBASE_DASHBOARD_DOCUMENT ?? "shared-state";
