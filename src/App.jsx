@@ -154,6 +154,13 @@ function eventCode(event) {
   return `E${event.id}`;
 }
 
+function eventDisplayName(event) {
+  if (event.id === 1) {
+    return "Singles Event #1";
+  }
+  return event.theme;
+}
+
 function clipVacationBlockToMonth(block, selectedMonth) {
   const [year, month] = selectedMonth.split("-").map(Number);
   const monthStart = `${selectedMonth}-01`;
@@ -198,14 +205,6 @@ function buildEventModels(events, vacationLookup) {
         });
       }
 
-      if (event.owner === "TBD") {
-        issues.push({
-          severity: "critical",
-          label: "No owner",
-          message: "This event still needs a responsible owner.",
-        });
-      }
-
       if (vacationConflicts.length > 0) {
         issues.push({
           severity: "critical",
@@ -244,6 +243,7 @@ function buildEventModels(events, vacationLookup) {
       return {
         ...event,
         code: eventCode(event),
+        displayName: eventDisplayName(event),
         nextMilestone,
         issues,
         severity,
@@ -319,6 +319,14 @@ export default function App() {
     monthEvents[0] ??
     visibleEvents[0] ??
     null;
+  const selectedEventIndex = selectedEvent
+    ? visibleEvents.findIndex((event) => event.id === selectedEvent.id)
+    : -1;
+  const previousEvent = selectedEventIndex > 0 ? visibleEvents[selectedEventIndex - 1] : null;
+  const nextEvent =
+    selectedEventIndex >= 0 && selectedEventIndex < visibleEvents.length - 1
+      ? visibleEvents[selectedEventIndex + 1]
+      : null;
 
   useEffect(() => {
     const candidates = monthEvents.length > 0 ? monthEvents : visibleEvents;
@@ -337,6 +345,15 @@ export default function App() {
       ...current,
       [filterId]: !current[filterId],
     }));
+  }
+
+  function jumpToAdjacentEvent(direction) {
+    if (direction === "previous" && previousEvent) {
+      focusEvent(previousEvent.id, previousEvent.eventDate);
+    }
+    if (direction === "next" && nextEvent) {
+      focusEvent(nextEvent.id, nextEvent.eventDate);
+    }
   }
 
   return (
@@ -515,7 +532,7 @@ export default function App() {
                             <span className="event-issue-count">{event.issueCount}</span>
                           )}
                         </div>
-                        <strong>{event.theme}</strong>
+                        <strong>{event.displayName}</strong>
                         <small>{event.owner}</small>
                       </button>
                     ))}
@@ -530,9 +547,31 @@ export default function App() {
         <aside className="sidebar">
           <div className="detail-panel">
             <div className="section-header">
-              <div>
-                <div className="eyebrow">Selected event</div>
-                <h2>{selectedEvent ? `${selectedEvent.code} ${selectedEvent.theme}` : "No event visible"}</h2>
+              <div className="selected-event-header">
+                <div>
+                  <div className="eyebrow">Selected event</div>
+                  <h2>{selectedEvent ? selectedEvent.displayName : "No event visible"}</h2>
+                </div>
+                <div className="event-nav">
+                  <button
+                    type="button"
+                    className="nav-button"
+                    onClick={() => jumpToAdjacentEvent("previous")}
+                    disabled={!previousEvent}
+                    aria-label="Previous event"
+                  >
+                    &lt;
+                  </button>
+                  <button
+                    type="button"
+                    className="nav-button"
+                    onClick={() => jumpToAdjacentEvent("next")}
+                    disabled={!nextEvent}
+                    aria-label="Next event"
+                  >
+                    &gt;
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -551,7 +590,7 @@ export default function App() {
                 <div className="detail-section">
                   <h3>What this event is</h3>
                   <p>
-                    {selectedEvent.code} is the {selectedEvent.theme} event scheduled for{" "}
+                    {selectedEvent.displayName} is the {selectedEvent.theme} event scheduled for{" "}
                     {formatShortDate(selectedEvent.eventDate)}.
                   </p>
                 </div>
@@ -632,10 +671,10 @@ export default function App() {
                       {event.issueCount > 0 ? `${event.issueCount} issue${event.issueCount === 1 ? "" : "s"}` : "On track"}
                     </span>
                   </div>
-                  <strong>{event.theme}</strong>
+                  <strong>{event.displayName}</strong>
                   <div className="directory-item-meta">
                     <span>{formatShortDate(event.eventDate)}</span>
-                    <span>{event.owner}</span>
+                    <span>{event.owner} · {event.theme}</span>
                   </div>
                 </button>
               ))}

@@ -340,6 +340,47 @@ button {
   font-size: 1.5rem;
 }
 
+.selected-event-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.event-nav {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.nav-button {
+  width: 2.2rem;
+  height: 2.2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease,
+    opacity 160ms ease;
+}
+
+.nav-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(117, 221, 255, 0.34);
+  background: rgba(117, 221, 255, 0.08);
+}
+
+.nav-button:disabled {
+  opacity: 0.34;
+  cursor: not-allowed;
+}
+
 .panel-note {
   color: var(--text-dim);
   font-size: 0.86rem;
