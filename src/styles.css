@@ -275,6 +275,87 @@ button {
   background: linear-gradient(180deg, rgba(117, 221, 255, 0.22), rgba(117, 221, 255, 0.1));
 }
 
+.inline-alert {
+  position: relative;
+  z-index: 1;
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: var(--shadow);
+}
+
+.auth-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(3, 8, 15, 0.68);
+  backdrop-filter: blur(10px);
+}
+
+.auth-modal {
+  width: min(31rem, 100%);
+  padding: 1.2rem;
+  border-radius: 24px;
+  border: 1px solid var(--border-strong);
+  background: rgba(10, 18, 29, 0.96);
+  box-shadow: var(--shadow);
+}
+
+.auth-modal-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.auth-modal-header h2 {
+  margin: 0.38rem 0 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.45rem;
+  letter-spacing: -0.03em;
+}
+
+.auth-modal-close {
+  width: 2.2rem;
+  height: 2.2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-soft);
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease,
+    opacity 160ms ease;
+}
+
+.auth-modal-close:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(117, 221, 255, 0.34);
+  background: rgba(117, 221, 255, 0.08);
+  color: var(--text);
+}
+
+.auth-modal-close:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.auth-modal-copy {
+  margin: 0.9rem 0 0;
+  color: var(--text-soft);
+}
+
 .header-meta {
   display: flex;
   flex-wrap: wrap;

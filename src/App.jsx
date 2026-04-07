@@ -6,7 +6,6 @@ import {
   isFirebaseEnabled,
   saveSharedState,
   signInEditorWithGoogle,
-  signOutEditor,
   subscribeToAuthState,
   subscribeToSharedState,
 } from "./firebaseSync";
@@ -373,32 +372,6 @@ function toneForEvent(event) {
   return `tone-${SEVERITY_META[event.severity].tone}`;
 }
 
-function syncTone(mode) {
-  if (mode === "cloud") {
-    return "tone-info";
-  }
-  if (mode === "saving") {
-    return "tone-warning";
-  }
-  if (mode === "connecting") {
-    return "tone-neutral";
-  }
-  return "tone-warning";
-}
-
-function syncLabel(mode) {
-  if (mode === "cloud") {
-    return "Cloud sync live";
-  }
-  if (mode === "saving") {
-    return "Saving";
-  }
-  if (mode === "connecting") {
-    return "Connecting";
-  }
-  return "Local only";
-}
-
 export default function App() {
   const firebaseEnabled = isFirebaseEnabled();
   const [todayKey, setTodayKey] = useState(() => getTodayKey());
@@ -406,13 +379,12 @@ export default function App() {
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [outputState, setOutputState] = useState(() => readOutputState());
   const [currentUser, setCurrentUser] = useState(null);
-  const [authReady, setAuthReady] = useState(() => !firebaseEnabled);
   const [authError, setAuthError] = useState("");
-  const [authNotice, setAuthNotice] = useState("");
   const [syncError, setSyncError] = useState("");
-  const [syncMode, setSyncMode] = useState(() => (firebaseEnabled ? "connecting" : "local"));
   const [sharedDocExists, setSharedDocExists] = useState(() => !firebaseEnabled);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [pendingToggle, setPendingToggle] = useState(null);
   const [filters, setFilters] = useState({
     sandy: true,
     patrice: true,
@@ -498,17 +470,11 @@ export default function App() {
 
     return subscribeToAuthState((user) => {
       setCurrentUser(user);
-      setAuthReady(true);
       if (!user) {
         return;
       }
 
       setAuthError("");
-      setAuthNotice(
-        canEditEmail(user.email)
-          ? `Editing is enabled for ${user.email}.`
-          : `${user.email} is signed in, but still read-only.`,
-      );
     });
   }, [firebaseEnabled]);
 
@@ -527,10 +493,8 @@ export default function App() {
         }
 
         setSyncError("");
-        setSyncMode("cloud");
       },
       (error) => {
-        setSyncMode("local");
         setSyncError(error?.message || "Cloud sync is unavailable right now.");
       },
     );
@@ -548,7 +512,6 @@ export default function App() {
     saveSharedState(outputState, currentUser.email)
       .then(() => {
         setSharedDocExists(true);
-        setSyncMode("cloud");
       })
       .catch((error) => {
         setSyncError(error?.message || "Could not seed cloud state.");
@@ -576,12 +539,17 @@ export default function App() {
     }
   }
 
-  async function toggleOutput(eventId, milestoneType, outputId) {
-    if (firebaseEnabled && !canEdit) {
-      setAuthError("Sign in with an approved editor email to change checklist state.");
+  function closeAuthModal() {
+    if (isSigningIn) {
       return;
     }
 
+    setAuthModalOpen(false);
+    setPendingToggle(null);
+    setAuthError("");
+  }
+
+  async function commitOutputToggle(eventId, milestoneType, outputId, overrideEditorEmail) {
     const stateKey = outputStateKey(eventId, milestoneType, outputId);
     const event = EVENTS.find((item) => item.id === eventId);
     const milestone = event?.milestones.find((item) => item.type === milestoneType);
@@ -601,13 +569,14 @@ export default function App() {
     }
 
     try {
-      setSyncMode("saving");
-      await saveSharedState(nextState, currentUser?.email ?? PRIMARY_EDITOR_EMAIL);
+      await saveSharedState(
+        nextState,
+        overrideEditorEmail ?? currentUser?.email ?? PRIMARY_EDITOR_EMAIL,
+      );
       setSharedDocExists(true);
-      setSyncMode("cloud");
+      setSyncError("");
     } catch (error) {
       setOutputState(previousState);
-      setSyncMode("cloud");
       setSyncError(error?.message || "Could not save checklist changes.");
     }
   }
@@ -615,15 +584,28 @@ export default function App() {
   async function handleSignInWithGoogle() {
     setIsSigningIn(true);
     setAuthError("");
-    setAuthNotice("");
 
     try {
       const user = await signInEditorWithGoogle();
-      if (user?.email) {
-        setAuthNotice(
-          canEditEmail(user.email)
-            ? `Signed in as ${user.email}. Editing is enabled.`
-            : `Signed in as ${user.email}. This account is still read-only.`,
+      if (!user?.email || !canEditEmail(user.email)) {
+        setAuthError(
+          PRIMARY_EDITOR_EMAIL
+            ? `Use ${PRIMARY_EDITOR_EMAIL} to change checklist state.`
+            : "This Google account cannot edit checklist state.",
+        );
+        return;
+      }
+
+      const toggleRequest = pendingToggle;
+      setAuthModalOpen(false);
+      setPendingToggle(null);
+
+      if (toggleRequest) {
+        await commitOutputToggle(
+          toggleRequest.eventId,
+          toggleRequest.milestoneType,
+          toggleRequest.outputId,
+          user.email,
         );
       }
     } catch (error) {
@@ -633,13 +615,19 @@ export default function App() {
     }
   }
 
-  async function handleSignOut() {
-    try {
-      await signOutEditor();
-      setAuthNotice("Signed out. The dashboard is now read-only.");
-    } catch (error) {
-      setAuthError(error?.message || "Could not sign out.");
+  async function toggleOutput(eventId, milestoneType, outputId) {
+    if (!canEdit) {
+      if (firebaseEnabled) {
+        setPendingToggle({ eventId, milestoneType, outputId });
+        setAuthModalOpen(true);
+        setAuthError("");
+        return;
+      }
+
+      return;
     }
+
+    await commitOutputToggle(eventId, milestoneType, outputId);
   }
 
   return (
@@ -663,90 +651,11 @@ export default function App() {
         </div>
       </div>
 
-      <section className="sync-panel">
-        <div>
-          <div className="eyebrow">{firebaseEnabled ? "Sharing & access" : "Sync setup"}</div>
-          <h2>
-            {firebaseEnabled ? "Public view, editor-only changes" : "Cloud sync not configured yet"}
-          </h2>
-          <p>
-            {firebaseEnabled
-              ? "Anyone with the URL can view the dashboard. Only approved editor emails can change checklist state."
-              : "The dashboard still works right now, but checklist updates only save in this browser until Firebase is configured."}
-          </p>
-          {authNotice && <p className="sync-feedback">{authNotice}</p>}
-          {authError && <p className="sync-feedback sync-feedback-error">{authError}</p>}
-          {syncError && <p className="sync-feedback sync-feedback-error">{syncError}</p>}
+      {syncError && (
+        <div className="inline-alert tone-critical">
+          <strong>Sync issue:</strong> {syncError}
         </div>
-
-        <div className="sync-card">
-          <div className="sync-card-topline">
-            <span className={`pill ${syncTone(syncMode)}`}>{syncLabel(syncMode)}</span>
-            <span className="pill tone-neutral">
-              {firebaseEnabled
-                ? currentUser?.email || (authReady ? "Viewer mode" : "Checking session")
-                : "Browser-only storage"}
-            </span>
-          </div>
-
-          {firebaseEnabled ? (
-            authReady ? (
-              currentUser ? (
-                <>
-                  <p className="sync-card-copy">
-                    {canEdit
-                      ? "This signed-in email can edit the shared checklist state from any device."
-                      : "This signed-in email can view the cloud state but cannot edit it."}
-                  </p>
-                  <div className="auth-actions">
-                    <span className={`pill ${canEdit ? "tone-positive" : "tone-neutral"}`}>
-                      {canEdit ? "Editing enabled" : "Read only"}
-                    </span>
-                    <button type="button" className="auth-button" onClick={handleSignOut}>
-                      Sign out
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div className="auth-form">
-                  <div className="auth-actions">
-                    <button
-                      type="button"
-                      className="auth-button auth-button-primary"
-                      onClick={handleSignInWithGoogle}
-                      disabled={isSigningIn}
-                    >
-                      {isSigningIn ? "Opening Google..." : "Sign in with Google"}
-                    </button>
-                  </div>
-                  <p className="sync-card-copy">
-                    Viewers do not need to sign in. Editors only need to sign in with Google
-                    when they want to change checklist state.
-                  </p>
-                  {PRIMARY_EDITOR_EMAIL && (
-                    <p className="sync-card-copy">
-                      Expected editor account: <strong>{PRIMARY_EDITOR_EMAIL}</strong>
-                    </p>
-                  )}
-                </div>
-              )
-            ) : (
-              <p className="sync-card-copy">Checking your sign-in session...</p>
-            )
-          ) : (
-            <>
-              <p className="sync-card-copy">
-                Add your Firebase config later and this panel will switch the dashboard into
-                shared cloud sync with public view and editor-only writes.
-              </p>
-              <div className="auth-actions">
-                <span className="pill tone-warning">Needs Firebase config</span>
-                <span className="pill tone-neutral">See FIREBASE_SETUP.md</span>
-              </div>
-            </>
-          )}
-        </div>
-      </section>
+      )}
 
       <section className="alert-strip">
         {alerts.length === 0 ? (
@@ -991,7 +900,6 @@ export default function App() {
                   <p className="milestone-section-note">
                     Each milestone has a definition, timing rule, and required outputs.
                     A step only turns done when every output below is checked off.
-                    {firebaseEnabled && !canEdit ? " Sign in with an approved editor email to make changes." : ""}
                   </p>
                   <div className="milestone-list">
                     {selectedEvent.milestones.map((milestone) => {
@@ -1033,7 +941,6 @@ export default function App() {
                                 className={[
                                   "output-item",
                                   output.done ? "done" : "",
-                                  firebaseEnabled && !canEdit ? "locked" : "",
                                 ]
                                   .filter(Boolean)
                                   .join(" ")}
@@ -1041,7 +948,6 @@ export default function App() {
                                 <input
                                   type="checkbox"
                                   checked={output.done}
-                                  disabled={firebaseEnabled && !canEdit}
                                   onChange={() =>
                                     toggleOutput(selectedEvent.id, milestone.type, output.id)
                                   }
@@ -1095,6 +1001,62 @@ export default function App() {
           </div>
         </aside>
       </section>
+
+      {authModalOpen && (
+        <div className="auth-modal-backdrop" role="presentation" onClick={closeAuthModal}>
+          <div
+            className="auth-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="auth-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="auth-modal-header">
+              <div>
+                <div className="eyebrow">Editor sign-in</div>
+                <h2 id="auth-modal-title">Sign in to change task status</h2>
+              </div>
+              <button
+                type="button"
+                className="auth-modal-close"
+                onClick={closeAuthModal}
+                aria-label="Close sign-in prompt"
+                disabled={isSigningIn}
+              >
+                x
+              </button>
+            </div>
+            <p className="auth-modal-copy">
+              Tick boxes stay visible for everyone, but only the approved Google account can
+              check or uncheck them.
+            </p>
+            {PRIMARY_EDITOR_EMAIL && (
+              <p className="auth-modal-copy">
+                Use <strong>{PRIMARY_EDITOR_EMAIL}</strong> to edit.
+              </p>
+            )}
+            {authError && <p className="sync-feedback sync-feedback-error">{authError}</p>}
+            <div className="auth-actions">
+              <button
+                type="button"
+                className="auth-button auth-button-primary"
+                onClick={handleSignInWithGoogle}
+                disabled={isSigningIn}
+              >
+                {isSigningIn ? "Opening Google..." : "Sign in with Google"}
+              </button>
+              <button
+                type="button"
+                className="auth-button"
+                onClick={closeAuthModal}
+                disabled={isSigningIn}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

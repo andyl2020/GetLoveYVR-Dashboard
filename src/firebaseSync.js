@@ -4,7 +4,6 @@ import {
   GoogleAuthProvider,
   onAuthStateChanged,
   signInWithPopup,
-  signOut,
 } from "firebase/auth";
 import { doc, getFirestore, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 
@@ -41,6 +40,7 @@ if (firebaseEnabled) {
   auth = getAuth(app);
   db = getFirestore(app);
   provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: "select_account" });
   sharedStateRef = doc(db, dashboardCollection, dashboardDocument);
 }
 
@@ -80,14 +80,6 @@ export function subscribeToAuthState(callback) {
   }
 
   return onAuthStateChanged(auth, callback);
-}
-
-export async function signOutEditor() {
-  if (!auth) {
-    return;
-  }
-
-  await signOut(auth);
 }
 
 export function subscribeToSharedState(onState, onError) {
