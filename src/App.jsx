@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BREAK_MARKERS, EVENTS, MARKETING, TODAY } from "./data";
+import { BREAK_MARKERS, EVENTS, MARKETING, TODAY, VACATION_BLOCKS } from "./data";
 
 const TAB_OPTIONS = [
   { id: "calendar", label: "Calendar" },
@@ -9,6 +9,11 @@ const TAB_OPTIONS = [
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MARKETING_STATUS_ORDER = ["todo", "drafted", "posted", "behind"];
+const CALENDAR_FILTERS = [
+  { id: "sandy", label: "Sandy events", owner: "Sandy", tone: "rose" },
+  { id: "patrice", label: "Patrice events", owner: "Patrice", tone: "cyan" },
+  { id: "vacations", label: "Vacations", tone: "mint" },
+];
 
 const STATUS_META = {
   done: { label: "Done", tone: "positive" },
@@ -80,6 +85,20 @@ function daysBetween(left, right) {
   return Math.round((left - right) / daySize);
 }
 
+function rangeDays(startDate, endDate) {
+  const start = parseDate(startDate);
+  const end = parseDate(endDate);
+  const days = [];
+  const cursor = new Date(start);
+
+  while (cursor <= end) {
+    days.push(dateKey(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return days;
+}
+
 function milestoneStatus(dateString, done) {
   if (done) {
     return "done";
@@ -118,7 +137,31 @@ function nextOpenMilestone(event) {
   return event.milestones.find((milestone) => !milestone.done) ?? null;
 }
 
-function buildScheduleItems(events) {
+function buildVacationItems() {
+  const items = [];
+
+  for (const block of VACATION_BLOCKS) {
+    for (const date of rangeDays(block.start, block.end)) {
+      items.push({
+        id: `vacation-${block.id}-${date}`,
+        date,
+        title: block.label,
+        detail: block.details,
+        owner: block.owner,
+        theme: "Vacation",
+        status: "pending",
+        type: block.label.toLowerCase().includes("back") ? "return" : "vacation",
+        tone: block.tone,
+        tentative: false,
+        done: false,
+      });
+    }
+  }
+
+  return items;
+}
+
+function buildScheduleItems(events, vacations) {
   const items = [];
 
   for (const event of events) {
@@ -152,6 +195,8 @@ function buildScheduleItems(events) {
       done: false,
     });
   }
+
+  items.push(...vacations);
 
   return items.sort((left, right) => {
     if (left.date !== right.date) {
@@ -187,34 +232,56 @@ function groupedMarketing(marketingItems) {
   return Object.entries(groups);
 }
 
+function scheduleItemTone(item) {
+  if (item.type === "vacation" || item.type === "return") {
+    return `tone-${item.tone}`;
+  }
+  if (item.type === "event-day") {
+    return "tone-info";
+  }
+  if (item.type === "marker") {
+    return "tone-neutral";
+  }
+  return `tone-${STATUS_META[item.status].tone}`;
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState("calendar");
   const [events, setEvents] = useState(EVENTS);
   const [marketing, setMarketing] = useState(MARKETING);
   const [selectedMonth, setSelectedMonth] = useState(monthKey(TODAY));
   const [selectedDay, setSelectedDay] = useState(TODAY);
-  const [selectedOwner, setSelectedOwner] = useState("All");
+  const [selectedMarketingOwner, setSelectedMarketingOwner] = useState("All");
   const [selectedMarketingStatus, setSelectedMarketingStatus] = useState("All");
-
-  const owners = ["All", ...new Set([...events.map((event) => event.owner), ...marketing.map((item) => item.owner)])];
-  const filteredEvents = events.filter((event) => {
-    if (selectedOwner === "All") {
-      return true;
-    }
-    return event.owner === selectedOwner;
+  const [calendarVisibility, setCalendarVisibility] = useState({
+    sandy: true,
+    patrice: true,
+    vacations: true,
   });
 
-  const scheduleItems = buildScheduleItems(filteredEvents);
+  const owners = ["All", ...new Set(marketing.map((item) => item.owner))];
+  const visibleEvents = events.filter((event) => {
+    if (event.owner === "Sandy" && !calendarVisibility.sandy) {
+      return false;
+    }
+    if (event.owner === "Patrice" && !calendarVisibility.patrice) {
+      return false;
+    }
+    return true;
+  });
+  const visibleVacations = calendarVisibility.vacations ? buildVacationItems() : [];
+
+  const scheduleItems = buildScheduleItems(visibleEvents, visibleVacations);
   const months = [...new Set(scheduleItems.map((item) => monthKey(item.date)))];
   const selectedDayItems = scheduleItems.filter((item) => item.date === selectedDay);
   const calendarCells = buildMonthGrid(selectedMonth);
-  const urgentItems = scheduleItems.filter((item) => item.status === "urgent" || item.status === "overdue");
-  const tentativeCount = filteredEvents.filter((event) => event.tentative).length;
-  const unownedCount = filteredEvents.filter((event) => event.owner === "TBD").length;
-  const completedMilestones = filteredEvents.flatMap((event) => event.milestones).filter((milestone) => milestone.done).length;
-  const totalMilestones = filteredEvents.flatMap((event) => event.milestones).length;
+  const urgentItems = scheduleItems.filter((item) => (item.type === "milestone" || item.type === "event-day") && (item.status === "urgent" || item.status === "overdue"));
+  const tentativeCount = visibleEvents.filter((event) => event.tentative).length;
+  const unownedCount = visibleEvents.filter((event) => event.owner === "TBD").length;
+  const completedMilestones = visibleEvents.flatMap((event) => event.milestones).filter((milestone) => milestone.done).length;
+  const totalMilestones = visibleEvents.flatMap((event) => event.milestones).length;
   const visibleMarketing = marketing.filter((item) => {
-    const ownerMatches = selectedOwner === "All" ? true : item.owner === selectedOwner;
+    const ownerMatches = selectedMarketingOwner === "All" ? true : item.owner === selectedMarketingOwner;
     const statusMatches = selectedMarketingStatus === "All" ? true : item.status === selectedMarketingStatus;
     return ownerMatches && statusMatches;
   });
@@ -259,6 +326,13 @@ export default function App() {
     );
   }
 
+  function toggleCalendarVisibility(filterId) {
+    setCalendarVisibility((current) => ({
+      ...current,
+      [filterId]: !current[filterId],
+    }));
+  }
+
   return (
     <div className="app-shell">
       <div className="background-orb background-orb-a" />
@@ -283,7 +357,7 @@ export default function App() {
           <div className="hero-panel-label">Snapshot</div>
           <div className="hero-stats">
             <article className="stat-card">
-              <span className="stat-value">{filteredEvents.length}</span>
+              <span className="stat-value">{visibleEvents.length}</span>
               <span className="stat-label">tracked events</span>
             </article>
             <article className="stat-card">
@@ -293,6 +367,10 @@ export default function App() {
             <article className="stat-card">
               <span className="stat-value">{tentativeCount}</span>
               <span className="stat-label">tentative slots</span>
+            </article>
+            <article className="stat-card">
+              <span className="stat-value">{visibleVacations.length}</span>
+              <span className="stat-label">vacation days shown</span>
             </article>
             <article className="stat-card">
               <span className="stat-value">
@@ -320,38 +398,57 @@ export default function App() {
           </div>
 
           <div className="filter-cluster">
-            <div className="filter-group">
-              <span className="filter-label">Owner</span>
-              <div className="chip-row">
-                {owners.map((owner) => (
-                  <button
-                    key={owner}
-                    type="button"
-                    className={owner === selectedOwner ? "chip active" : "chip"}
-                    onClick={() => setSelectedOwner(owner)}
-                  >
-                    {owner}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {activeTab === "marketing" && (
+            {activeTab !== "marketing" && (
               <div className="filter-group">
-                <span className="filter-label">Status</span>
+                <span className="filter-label">Calendar filters</span>
                 <div className="chip-row">
-                  {["All", ...MARKETING_STATUS_ORDER].map((statusId) => (
+                  {CALENDAR_FILTERS.map((filter) => (
                     <button
-                      key={statusId}
+                      key={filter.id}
                       type="button"
-                      className={statusId === selectedMarketingStatus ? "chip active" : "chip"}
-                      onClick={() => setSelectedMarketingStatus(statusId)}
+                      className={`chip calendar-chip ${calendarVisibility[filter.id] ? "active" : ""} calendar-chip-${filter.tone}`}
+                      onClick={() => toggleCalendarVisibility(filter.id)}
                     >
-                      {statusId === "All" ? "All" : MARKETING_STATUS_META[statusId].label}
+                      {filter.label}
                     </button>
                   ))}
                 </div>
               </div>
+            )}
+
+            {activeTab === "marketing" && (
+              <>
+                <div className="filter-group">
+                  <span className="filter-label">Owner</span>
+                  <div className="chip-row">
+                    {owners.map((owner) => (
+                      <button
+                        key={owner}
+                        type="button"
+                        className={owner === selectedMarketingOwner ? "chip active" : "chip"}
+                        onClick={() => setSelectedMarketingOwner(owner)}
+                      >
+                        {owner}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="filter-group">
+                  <span className="filter-label">Status</span>
+                  <div className="chip-row">
+                    {["All", ...MARKETING_STATUS_ORDER].map((statusId) => (
+                      <button
+                        key={statusId}
+                        type="button"
+                        className={statusId === selectedMarketingStatus ? "chip active" : "chip"}
+                        onClick={() => setSelectedMarketingStatus(statusId)}
+                      >
+                        {statusId === "All" ? "All" : MARKETING_STATUS_META[statusId].label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
             )}
           </div>
         </section>
@@ -410,7 +507,7 @@ export default function App() {
                         {dayItems.slice(0, 3).map((item) => (
                           <span
                             key={item.id}
-                            className={`mini-chip tone-${item.type === "event-day" ? "info" : STATUS_META[item.status].tone}`}
+                            className={`mini-chip ${scheduleItemTone(item)}`}
                           >
                             {item.type === "event-day" ? item.theme : item.title}
                           </span>
@@ -454,9 +551,13 @@ export default function App() {
                 {selectedDayItems.map((item) => (
                   <article key={item.id} className="agenda-card">
                     <div className="agenda-topline">
-                      <span className={`badge tone-${item.type === "event-day" ? "info" : STATUS_META[item.status].tone}`}>
+                      <span className={`badge ${scheduleItemTone(item)}`}>
                         {item.type === "marker"
                           ? "Ops note"
+                          : item.type === "vacation"
+                            ? "Vacation"
+                            : item.type === "return"
+                              ? "Return"
                           : item.type === "event-day"
                             ? "Event day"
                             : STATUS_META[item.status].label}
@@ -488,7 +589,7 @@ export default function App() {
               </div>
 
               <div className="event-grid">
-                {filteredEvents.map((event, index) => {
+                {visibleEvents.map((event, index) => {
                   const health = eventHealth(event);
                   const nextMilestone = nextOpenMilestone(event);
                   return (
@@ -665,10 +766,11 @@ export default function App() {
                   </p>
                 </article>
                 <article className="note-card">
-                  <h3>Owner filter</h3>
+                  <h3>Vacation overlay</h3>
                   <p>
-                    The owner filter applies across tabs so you can isolate Sandy,
-                    Patrice, Andy, or the TBD backlog in one move.
+                    Sandy, Patrice, and Andy travel dates are logged directly in the
+                    calendar, and the Sandy, Patrice, and Vacations chips can be toggled
+                    on or off without losing the rest of the board.
                   </p>
                 </article>
               </div>

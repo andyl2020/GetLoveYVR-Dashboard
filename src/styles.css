@@ -498,6 +498,24 @@ button {
   border-color: rgba(113, 226, 255, 0.26);
 }
 
+.tone-rose {
+  background: rgba(255, 138, 166, 0.14);
+  color: var(--rose);
+  border-color: rgba(255, 138, 166, 0.26);
+}
+
+.tone-cyan {
+  background: rgba(113, 226, 255, 0.14);
+  color: var(--accent);
+  border-color: rgba(113, 226, 255, 0.26);
+}
+
+.tone-mint {
+  background: rgba(126, 242, 203, 0.14);
+  color: var(--mint);
+  border-color: rgba(126, 242, 203, 0.26);
+}
+
 .owner-rose {
   color: var(--rose);
   border-color: rgba(255, 138, 166, 0.25);
@@ -515,6 +533,40 @@ button {
 
 .owner-slate {
   color: var(--text-soft);
+}
+
+.calendar-chip {
+  position: relative;
+}
+
+.calendar-chip-rose {
+  color: rgba(255, 138, 166, 0.86);
+  border-color: rgba(255, 138, 166, 0.24);
+}
+
+.calendar-chip-cyan {
+  color: rgba(113, 226, 255, 0.92);
+  border-color: rgba(113, 226, 255, 0.24);
+}
+
+.calendar-chip-mint {
+  color: rgba(126, 242, 203, 0.92);
+  border-color: rgba(126, 242, 203, 0.24);
+}
+
+.calendar-chip-rose.active {
+  background: linear-gradient(180deg, rgba(255, 138, 166, 0.24), rgba(255, 138, 166, 0.08));
+  border-color: rgba(255, 138, 166, 0.34);
+}
+
+.calendar-chip-cyan.active {
+  background: linear-gradient(180deg, rgba(113, 226, 255, 0.24), rgba(113, 226, 255, 0.08));
+  border-color: rgba(113, 226, 255, 0.34);
+}
+
+.calendar-chip-mint.active {
+  background: linear-gradient(180deg, rgba(126, 242, 203, 0.24), rgba(126, 242, 203, 0.08));
+  border-color: rgba(126, 242, 203, 0.34);
 }
 
 .day-summary {
