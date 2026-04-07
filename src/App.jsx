@@ -1,19 +1,21 @@
 import { useEffect, useState } from "react";
-import { BREAK_MARKERS, EVENTS, MARKETING, TODAY, VACATION_BLOCKS } from "./data";
-
-const TAB_OPTIONS = [
-  { id: "calendar", label: "Calendar" },
-  { id: "operations", label: "Operations" },
-  { id: "marketing", label: "Marketing" },
-];
+import { EVENTS, TODAY, VACATION_BLOCKS } from "./data";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MARKETING_STATUS_ORDER = ["todo", "drafted", "posted", "behind"];
-const CALENDAR_FILTERS = [
-  { id: "sandy", label: "Sandy events", owner: "Sandy", tone: "rose" },
-  { id: "patrice", label: "Patrice events", owner: "Patrice", tone: "cyan" },
+
+const FILTER_OPTIONS = [
+  { id: "sandy", label: "Sandy events", tone: "rose" },
+  { id: "patrice", label: "Patrice events", tone: "cyan" },
   { id: "vacations", label: "Vacations", tone: "mint" },
+  { id: "issuesOnly", label: "Only issues", tone: "critical" },
 ];
+
+const OWNER_TONES = {
+  Sandy: "rose",
+  Patrice: "cyan",
+  Andy: "mint",
+  TBD: "slate",
+};
 
 const STATUS_META = {
   done: { label: "Done", tone: "positive" },
@@ -22,24 +24,11 @@ const STATUS_META = {
   pending: { label: "Upcoming", tone: "neutral" },
 };
 
-const MARKETING_STATUS_META = {
-  todo: { label: "To do", tone: "neutral" },
-  drafted: { label: "Drafted", tone: "info" },
-  posted: { label: "Posted", tone: "positive" },
-  behind: { label: "Behind", tone: "critical" },
-};
-
-const OWNER_META = {
-  Sandy: "rose",
-  Patrice: "cyan",
-  Andy: "mint",
-  TBD: "slate",
-};
-
-const PLATFORM_META = {
-  Instagram: "rose",
-  TikTok: "cyan",
-  Flock: "amber",
+const SEVERITY_META = {
+  critical: { label: "Needs action", tone: "critical" },
+  warning: { label: "Watch", tone: "warning" },
+  healthy: { label: "On track", tone: "info" },
+  done: { label: "Done", tone: "positive" },
 };
 
 function parseDate(value) {
@@ -56,28 +45,6 @@ function dateKey(date) {
 
 function monthKey(value) {
   return value.slice(0, 7);
-}
-
-function formatMonthLabel(value) {
-  return parseDate(`${value}-01`).toLocaleDateString("en-US", {
-    month: "long",
-    year: "numeric",
-  });
-}
-
-function formatDayLabel(value) {
-  return parseDate(value).toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function formatShortDate(value) {
-  return parseDate(value).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
 }
 
 function daysBetween(left, right) {
@@ -99,111 +66,39 @@ function rangeDays(startDate, endDate) {
   return days;
 }
 
-function milestoneStatus(dateString, done) {
-  if (done) {
-    return "done";
-  }
-
-  const diff = daysBetween(parseDate(dateString), parseDate(TODAY));
-  if (diff < 0) {
-    return "overdue";
-  }
-  if (diff <= 5) {
-    return "urgent";
-  }
-  return "pending";
-}
-
-function eventHealth(event) {
-  const statuses = event.milestones.map((milestone) => milestoneStatus(milestone.date, milestone.done));
-  if (statuses.includes("overdue")) {
-    return "overdue";
-  }
-  if (statuses.includes("urgent")) {
-    return "urgent";
-  }
-  if (statuses.every((status) => status === "done")) {
-    return "done";
-  }
-  return "pending";
-}
-
-function completionRatio(event) {
-  const completeCount = event.milestones.filter((milestone) => milestone.done).length;
-  return Math.round((completeCount / event.milestones.length) * 100);
-}
-
-function nextOpenMilestone(event) {
-  return event.milestones.find((milestone) => !milestone.done) ?? null;
-}
-
-function buildVacationItems() {
-  const items = [];
-
-  for (const block of VACATION_BLOCKS) {
-    for (const date of rangeDays(block.start, block.end)) {
-      items.push({
-        id: `vacation-${block.id}-${date}`,
-        date,
-        title: block.label,
-        detail: block.details,
-        owner: block.owner,
-        theme: "Vacation",
-        status: "pending",
-        type: block.label.toLowerCase().includes("back") ? "return" : "vacation",
-        tone: block.tone,
-        tentative: false,
-        done: false,
-      });
-    }
-  }
-
-  return items;
-}
-
-function buildScheduleItems(events, vacations) {
-  const items = [];
-
-  for (const event of events) {
-    for (const milestone of event.milestones) {
-      items.push({
-        id: `milestone-${event.id}-${milestone.label}`,
-        date: milestone.date,
-        title: `${event.theme} - ${milestone.label}`,
-        detail: event.seriesNumber,
-        owner: event.owner,
-        theme: event.theme,
-        status: milestoneStatus(milestone.date, milestone.done),
-        type: milestone.label === "Event Day" ? "event-day" : "milestone",
-        tentative: event.tentative,
-        done: milestone.done,
-      });
-    }
-  }
-
-  for (const marker of BREAK_MARKERS) {
-    items.push({
-      id: marker.id,
-      date: marker.date,
-      title: marker.title,
-      detail: marker.details,
-      owner: "Ops",
-      theme: "Break",
-      status: "pending",
-      type: "marker",
-      tentative: false,
-      done: false,
-    });
-  }
-
-  items.push(...vacations);
-
-  return items.sort((left, right) => {
-    if (left.date !== right.date) {
-      return left.date.localeCompare(right.date);
-    }
-    return left.title.localeCompare(right.title);
+function formatMonthLabel(value) {
+  return parseDate(`${value}-01`).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
   });
+}
+
+function formatShortDate(value) {
+  return parseDate(value).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatDayLabel(value) {
+  return parseDate(value).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatDateRange(startDate, endDate) {
+  if (startDate === endDate) {
+    return formatShortDate(startDate);
+  }
+
+  const start = parseDate(startDate);
+  const end = parseDate(endDate);
+  if (start.getMonth() === end.getMonth()) {
+    return `${start.toLocaleDateString("en-US", { month: "short" })} ${start.getDate()}-${end.getDate()}`;
+  }
+  return `${formatShortDate(startDate)}-${formatShortDate(endDate)}`;
 }
 
 function buildMonthGrid(selectedMonth) {
@@ -223,111 +118,222 @@ function buildMonthGrid(selectedMonth) {
   return cells;
 }
 
-function groupedMarketing(marketingItems) {
-  const groups = {};
-  for (const item of [...marketingItems].sort((left, right) => left.weekStart.localeCompare(right.weekStart))) {
-    groups[item.weekLabel] ??= [];
-    groups[item.weekLabel].push(item);
+function buildVacationLookup(blocks) {
+  const lookup = {};
+
+  for (const block of blocks) {
+    lookup[block.owner] ??= new Set();
+    for (const date of rangeDays(block.start, block.end)) {
+      lookup[block.owner].add(date);
+    }
   }
-  return Object.entries(groups);
+
+  return lookup;
 }
 
-function scheduleItemTone(item) {
-  if (item.type === "vacation" || item.type === "return") {
-    return `tone-${item.tone}`;
+function buildMonthOptions(events) {
+  return [...new Set([monthKey(TODAY), ...events.map((event) => monthKey(event.eventDate))])].sort();
+}
+
+function milestoneStatus(dateString, done) {
+  if (done) {
+    return "done";
   }
-  if (item.type === "event-day") {
-    return "tone-info";
+
+  const diff = daysBetween(parseDate(dateString), parseDate(TODAY));
+  if (diff < 0) {
+    return "overdue";
   }
-  if (item.type === "marker") {
-    return "tone-neutral";
+  if (diff <= 5) {
+    return "urgent";
   }
-  return `tone-${STATUS_META[item.status].tone}`;
+  return "pending";
+}
+
+function eventCode(event) {
+  return `E${event.id}`;
+}
+
+function clipVacationBlockToMonth(block, selectedMonth) {
+  const [year, month] = selectedMonth.split("-").map(Number);
+  const monthStart = `${selectedMonth}-01`;
+  const monthEnd = dateKey(new Date(year, month, 0, 12, 0, 0));
+  const start = block.start < monthStart ? monthStart : block.start;
+  const end = block.end > monthEnd ? monthEnd : block.end;
+
+  if (start > end) {
+    return null;
+  }
+
+  return {
+    ...block,
+    start,
+    end,
+  };
+}
+
+function buildEventModels(events, vacationLookup) {
+  return [...events]
+    .sort((left, right) => left.eventDate.localeCompare(right.eventDate))
+    .map((event) => {
+      const issues = [];
+      const ownerVacationDays = vacationLookup[event.owner] ?? new Set();
+      const overdueMilestones = event.milestones.filter(
+        (milestone) => !milestone.done && milestoneStatus(milestone.date, milestone.done) === "overdue",
+      );
+      const nextMilestone = event.milestones.find((milestone) => !milestone.done) ?? null;
+      const vacationConflicts = event.milestones.filter(
+        (milestone) => !milestone.done && ownerVacationDays.has(milestone.date),
+      );
+      const daysUntilEvent = daysBetween(parseDate(event.eventDate), parseDate(TODAY));
+
+      if (overdueMilestones.length > 0) {
+        issues.push({
+          severity: "critical",
+          label: "Overdue milestone",
+          message:
+            overdueMilestones.length === 1
+              ? `${overdueMilestones[0].label} is overdue.`
+              : `${overdueMilestones.length} milestones are overdue.`,
+        });
+      }
+
+      if (event.owner === "TBD") {
+        issues.push({
+          severity: "critical",
+          label: "No owner",
+          message: "This event still needs a responsible owner.",
+        });
+      }
+
+      if (vacationConflicts.length > 0) {
+        issues.push({
+          severity: "critical",
+          label: "Owner conflict",
+          message:
+            vacationConflicts.length === 1
+              ? `${event.owner} is away during ${vacationConflicts[0].label}.`
+              : `${event.owner} is away during ${vacationConflicts.length} milestones.`,
+        });
+      }
+
+      if (nextMilestone && milestoneStatus(nextMilestone.date, nextMilestone.done) === "urgent") {
+        issues.push({
+          severity: "warning",
+          label: "Due soon",
+          message: `${nextMilestone.label} is due ${formatShortDate(nextMilestone.date)}.`,
+        });
+      }
+
+      if (event.tentative && daysUntilEvent <= 35) {
+        issues.push({
+          severity: "warning",
+          label: "Tentative",
+          message: `Still tentative with ${Math.max(daysUntilEvent, 0)} days until event day.`,
+        });
+      }
+
+      const severity = issues.some((issue) => issue.severity === "critical")
+        ? "critical"
+        : issues.length > 0
+          ? "warning"
+          : event.milestones.every((milestone) => milestone.done)
+            ? "done"
+            : "healthy";
+
+      return {
+        ...event,
+        code: eventCode(event),
+        nextMilestone,
+        issues,
+        severity,
+        issueCount: issues.length,
+      };
+    });
+}
+
+function buildAlerts(eventModels) {
+  return eventModels
+    .flatMap((event) =>
+      event.issues.map((issue) => ({
+        ...issue,
+        eventId: event.id,
+        code: event.code,
+        theme: event.theme,
+        owner: event.owner,
+        eventDate: event.eventDate,
+      })),
+    )
+    .sort((left, right) => {
+      if (left.severity !== right.severity) {
+        return left.severity === "critical" ? -1 : 1;
+      }
+      return left.eventDate.localeCompare(right.eventDate);
+    });
+}
+
+function toneForEvent(event) {
+  return `tone-${SEVERITY_META[event.severity].tone}`;
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState("calendar");
-  const [events, setEvents] = useState(EVENTS);
-  const [marketing, setMarketing] = useState(MARKETING);
   const [selectedMonth, setSelectedMonth] = useState(monthKey(TODAY));
-  const [selectedDay, setSelectedDay] = useState(TODAY);
-  const [selectedMarketingOwner, setSelectedMarketingOwner] = useState("All");
-  const [selectedMarketingStatus, setSelectedMarketingStatus] = useState("All");
-  const [calendarVisibility, setCalendarVisibility] = useState({
+  const [selectedEventId, setSelectedEventId] = useState(null);
+  const [filters, setFilters] = useState({
     sandy: true,
     patrice: true,
     vacations: true,
+    issuesOnly: false,
   });
 
-  const owners = ["All", ...new Set(marketing.map((item) => item.owner))];
-  const visibleEvents = events.filter((event) => {
-    if (event.owner === "Sandy" && !calendarVisibility.sandy) {
+  const monthOptions = buildMonthOptions(EVENTS);
+  const vacationLookup = buildVacationLookup(VACATION_BLOCKS);
+  const eventModels = buildEventModels(EVENTS, vacationLookup);
+  const visibleEvents = eventModels.filter((event) => {
+    if (!filters.sandy && event.owner === "Sandy") {
       return false;
     }
-    if (event.owner === "Patrice" && !calendarVisibility.patrice) {
+    if (!filters.patrice && event.owner === "Patrice") {
+      return false;
+    }
+    if (filters.issuesOnly && event.issueCount === 0) {
       return false;
     }
     return true;
   });
-  const visibleVacations = calendarVisibility.vacations ? buildVacationItems() : [];
-
-  const scheduleItems = buildScheduleItems(visibleEvents, visibleVacations);
-  const months = [...new Set(scheduleItems.map((item) => monthKey(item.date)))];
-  const selectedDayItems = scheduleItems.filter((item) => item.date === selectedDay);
+  const monthEvents = visibleEvents.filter((event) => monthKey(event.eventDate) === selectedMonth);
   const calendarCells = buildMonthGrid(selectedMonth);
-  const urgentItems = scheduleItems.filter((item) => (item.type === "milestone" || item.type === "event-day") && (item.status === "urgent" || item.status === "overdue"));
-  const tentativeCount = visibleEvents.filter((event) => event.tentative).length;
-  const unownedCount = visibleEvents.filter((event) => event.owner === "TBD").length;
-  const completedMilestones = visibleEvents.flatMap((event) => event.milestones).filter((milestone) => milestone.done).length;
-  const totalMilestones = visibleEvents.flatMap((event) => event.milestones).length;
-  const visibleMarketing = marketing.filter((item) => {
-    const ownerMatches = selectedMarketingOwner === "All" ? true : item.owner === selectedMarketingOwner;
-    const statusMatches = selectedMarketingStatus === "All" ? true : item.status === selectedMarketingStatus;
-    return ownerMatches && statusMatches;
-  });
+  const alerts = buildAlerts(visibleEvents);
+  const criticalCount = alerts.filter((alert) => alert.severity === "critical").length;
+  const warningCount = alerts.filter((alert) => alert.severity === "warning").length;
+  const availabilityRows = ["Sandy", "Patrice", "Andy"].map((owner) => ({
+    owner,
+    tone: OWNER_TONES[owner],
+    blocks: VACATION_BLOCKS
+      .filter((block) => block.owner === owner)
+      .map((block) => clipVacationBlockToMonth(block, selectedMonth))
+      .filter(Boolean),
+  }));
+  const selectedEvent =
+    visibleEvents.find((event) => event.id === selectedEventId) ??
+    monthEvents[0] ??
+    visibleEvents[0] ??
+    null;
 
   useEffect(() => {
-    if (!months.includes(selectedMonth) && months[0]) {
-      setSelectedMonth(months[0]);
+    const candidates = monthEvents.length > 0 ? monthEvents : visibleEvents;
+    if (!selectedEventId || !candidates.some((event) => event.id === selectedEventId)) {
+      setSelectedEventId(candidates[0]?.id ?? null);
     }
-  }, [months, selectedMonth]);
+  }, [monthEvents, selectedEventId, visibleEvents]);
 
-  function toggleMilestone(eventId, milestoneLabel) {
-    setEvents((currentEvents) =>
-      currentEvents.map((event) => {
-        if (event.id !== eventId) {
-          return event;
-        }
-        return {
-          ...event,
-          milestones: event.milestones.map((milestone) =>
-            milestone.label === milestoneLabel
-              ? { ...milestone, done: !milestone.done }
-              : milestone,
-          ),
-        };
-      }),
-    );
+  function focusEvent(eventId, eventDate) {
+    setSelectedMonth(monthKey(eventDate));
+    setSelectedEventId(eventId);
   }
 
-  function cycleMarketingStatus(marketingId) {
-    setMarketing((currentItems) =>
-      currentItems.map((item) => {
-        if (item.id !== marketingId) {
-          return item;
-        }
-        const currentIndex = MARKETING_STATUS_ORDER.indexOf(item.status);
-        const nextIndex = (currentIndex + 1) % MARKETING_STATUS_ORDER.length;
-        return {
-          ...item,
-          status: MARKETING_STATUS_ORDER[nextIndex],
-        };
-      }),
-    );
-  }
-
-  function toggleCalendarVisibility(filterId) {
-    setCalendarVisibility((current) => ({
+  function toggleFilter(filterId) {
+    setFilters((current) => ({
       ...current,
       [filterId]: !current[filterId],
     }));
@@ -335,449 +341,308 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <div className="background-orb background-orb-a" />
-      <div className="background-orb background-orb-b" />
+      <div className="backdrop-orb backdrop-orb-a" />
+      <div className="backdrop-orb backdrop-orb-b" />
 
-      <header className="hero">
-        <div className="hero-copy">
-          <div className="eyebrow">GetLoveYVR dashboard</div>
-          <h1>Calendar-first planning for events, owners, and launch pressure.</h1>
+      <div className="page-header">
+        <div>
+          <div className="eyebrow">GetLoveYVR</div>
+          <h1>Event calendar</h1>
           <p>
-            Rebuilt from the original dashboard into a cleaner command surface with
-            an actual calendar, sharper hierarchy, and smoother controls.
+            Events live in the calendar, vacations live in availability, and anything
+            wrong shows up in alerts first.
           </p>
-          <div className="hero-meta">
-            <span>{formatDayLabel(TODAY)}</span>
-            <span>8 event arcs</span>
-            <span>10 marketing tasks</span>
-          </div>
         </div>
-
-        <div className="hero-panel">
-          <div className="hero-panel-label">Snapshot</div>
-          <div className="hero-stats">
-            <article className="stat-card">
-              <span className="stat-value">{visibleEvents.length}</span>
-              <span className="stat-label">tracked events</span>
-            </article>
-            <article className="stat-card">
-              <span className="stat-value">{urgentItems.length}</span>
-              <span className="stat-label">urgent or overdue</span>
-            </article>
-            <article className="stat-card">
-              <span className="stat-value">{tentativeCount}</span>
-              <span className="stat-label">tentative slots</span>
-            </article>
-            <article className="stat-card">
-              <span className="stat-value">{visibleVacations.length}</span>
-              <span className="stat-label">vacation days shown</span>
-            </article>
-            <article className="stat-card">
-              <span className="stat-value">
-                {completedMilestones}/{totalMilestones}
-              </span>
-              <span className="stat-label">milestones done</span>
-            </article>
-          </div>
+        <div className="header-meta">
+          <span>{formatDayLabel(TODAY)}</span>
+          <span>{visibleEvents.length} visible events</span>
+          <span>{alerts.length === 0 ? "All clear" : `${alerts.length} alerts`}</span>
         </div>
-      </header>
+      </div>
 
-      <main className="workspace">
-        <section className="toolbar">
-          <div className="segmented-control">
-            {TAB_OPTIONS.map((tabOption) => (
+      <section className="alert-strip">
+        {alerts.length === 0 ? (
+          <div className="alert-card alert-card-ok">
+            <div className="alert-card-title">All clear</div>
+            <p>No overdue milestones, owner conflicts, or tentative near-term events.</p>
+          </div>
+        ) : (
+          <>
+            <div className="alert-summary">
+              <div className="alert-summary-title">Anything wrong?</div>
+              <div className="alert-summary-stats">
+                <span className="pill tone-critical">{criticalCount} critical</span>
+                <span className="pill tone-warning">{warningCount} warning</span>
+              </div>
+            </div>
+
+            {alerts.slice(0, 4).map((alert) => (
               <button
-                key={tabOption.id}
+                key={`${alert.eventId}-${alert.label}`}
                 type="button"
-                className={tabOption.id === activeTab ? "segment active" : "segment"}
-                onClick={() => setActiveTab(tabOption.id)}
+                className={`alert-card tone-${SEVERITY_META[alert.severity].tone}`}
+                onClick={() => focusEvent(alert.eventId, alert.eventDate)}
               >
-                {tabOption.label}
+                <div className="alert-card-topline">
+                  <span className="pill subtle-pill">{alert.code}</span>
+                  <span className={`pill tone-${SEVERITY_META[alert.severity].tone}`}>
+                    {alert.label}
+                  </span>
+                </div>
+                <strong>{alert.theme}</strong>
+                <p>{alert.message}</p>
               </button>
+            ))}
+          </>
+        )}
+      </section>
+
+      <section className="control-bar">
+        <div className="month-switcher">
+          {monthOptions.map((month) => (
+            <button
+              key={month}
+              type="button"
+              className={month === selectedMonth ? "switch-chip active" : "switch-chip"}
+              onClick={() => setSelectedMonth(month)}
+            >
+              {formatMonthLabel(month)}
+            </button>
+          ))}
+        </div>
+
+        <div className="filter-row">
+          {FILTER_OPTIONS.map((filter) => (
+            <button
+              key={filter.id}
+              type="button"
+              className={`switch-chip filter-chip filter-chip-${filter.tone} ${filters[filter.id] ? "active" : ""}`}
+              onClick={() => toggleFilter(filter.id)}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {filters.vacations && (
+        <section className="availability-panel">
+          <div className="section-header">
+            <div>
+              <div className="eyebrow">Availability</div>
+              <h2>{formatMonthLabel(selectedMonth)}</h2>
+            </div>
+          </div>
+
+          <div className="availability-rows">
+            {availabilityRows.map((row) => (
+              <div key={row.owner} className="availability-row">
+                <div className="availability-owner">
+                  <span className={`owner-tag owner-${row.tone}`}>{row.owner}</span>
+                </div>
+                <div className="availability-blocks">
+                  {row.blocks.length === 0 ? (
+                    <span className="availability-empty">Available all month</span>
+                  ) : (
+                    row.blocks.map((block) => (
+                      <span
+                        key={block.id}
+                        className={`availability-chip tone-${block.tone}`}
+                      >
+                        {block.label} · {formatDateRange(block.start, block.end)}
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="main-layout">
+        <div className="calendar-panel">
+          <div className="section-header">
+            <div>
+              <div className="eyebrow">Calendar</div>
+              <h2>{formatMonthLabel(selectedMonth)}</h2>
+            </div>
+            <div className="panel-note">Events only</div>
+          </div>
+
+          <div className="calendar-headings">
+            {DAY_NAMES.map((dayName) => (
+              <div key={dayName} className="calendar-heading">
+                {dayName}
+              </div>
             ))}
           </div>
 
-          <div className="filter-cluster">
-            {activeTab !== "marketing" && (
-              <div className="filter-group">
-                <span className="filter-label">Calendar filters</span>
-                <div className="chip-row">
-                  {CALENDAR_FILTERS.map((filter) => (
-                    <button
-                      key={filter.id}
-                      type="button"
-                      className={`chip calendar-chip ${calendarVisibility[filter.id] ? "active" : ""} calendar-chip-${filter.tone}`}
-                      onClick={() => toggleCalendarVisibility(filter.id)}
-                    >
-                      {filter.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+          <div className="calendar-grid">
+            {calendarCells.map((cell) => {
+              const dayEvents = monthEvents.filter((event) => event.eventDate === cell.date);
+              const selectedDay = selectedEvent?.eventDate === cell.date;
+              const today = cell.date === TODAY;
 
-            {activeTab === "marketing" && (
-              <>
-                <div className="filter-group">
-                  <span className="filter-label">Owner</span>
-                  <div className="chip-row">
-                    {owners.map((owner) => (
+              return (
+                <div
+                  key={cell.date}
+                  className={[
+                    "calendar-day",
+                    cell.inMonth ? "" : "calendar-day-muted",
+                    selectedDay ? "selected" : "",
+                    today ? "today" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                >
+                  <div className="calendar-day-topline">
+                    <span className="calendar-day-number">{parseDate(cell.date).getDate()}</span>
+                    {today && <span className="calendar-day-badge">Today</span>}
+                  </div>
+
+                  <div className="calendar-event-stack">
+                    {dayEvents.map((event) => (
                       <button
-                        key={owner}
+                        key={event.id}
                         type="button"
-                        className={owner === selectedMarketingOwner ? "chip active" : "chip"}
-                        onClick={() => setSelectedMarketingOwner(owner)}
+                        className={`event-pill ${toneForEvent(event)} ${selectedEvent?.id === event.id ? "active" : ""}`}
+                        onClick={() => setSelectedEventId(event.id)}
                       >
-                        {owner}
+                        <div className="event-pill-topline">
+                          <span className="event-code">{event.code}</span>
+                          {event.issueCount > 0 && (
+                            <span className="event-issue-count">{event.issueCount}</span>
+                          )}
+                        </div>
+                        <strong>{event.theme}</strong>
+                        <small>{event.owner}</small>
                       </button>
                     ))}
+                    {dayEvents.length === 0 && <div className="calendar-empty" />}
                   </div>
                 </div>
-                <div className="filter-group">
-                  <span className="filter-label">Status</span>
-                  <div className="chip-row">
-                    {["All", ...MARKETING_STATUS_ORDER].map((statusId) => (
-                      <button
-                        key={statusId}
-                        type="button"
-                        className={statusId === selectedMarketingStatus ? "chip active" : "chip"}
-                        onClick={() => setSelectedMarketingStatus(statusId)}
-                      >
-                        {statusId === "All" ? "All" : MARKETING_STATUS_META[statusId].label}
-                      </button>
-                    ))}
+              );
+            })}
+          </div>
+        </div>
+
+        <aside className="sidebar">
+          <div className="detail-panel">
+            <div className="section-header">
+              <div>
+                <div className="eyebrow">Selected event</div>
+                <h2>{selectedEvent ? `${selectedEvent.code} ${selectedEvent.theme}` : "No event visible"}</h2>
+              </div>
+            </div>
+
+            {selectedEvent ? (
+              <>
+                <div className="detail-summary">
+                  <span className={`pill ${toneForEvent(selectedEvent)}`}>
+                    {SEVERITY_META[selectedEvent.severity].label}
+                  </span>
+                  <span className={`owner-tag owner-${OWNER_TONES[selectedEvent.owner] ?? "slate"}`}>
+                    {selectedEvent.owner}
+                  </span>
+                  <span className="detail-date">{formatDayLabel(selectedEvent.eventDate)}</span>
+                </div>
+
+                <div className="detail-section">
+                  <h3>What this event is</h3>
+                  <p>
+                    {selectedEvent.code} is the {selectedEvent.theme} event scheduled for{" "}
+                    {formatShortDate(selectedEvent.eventDate)}.
+                  </p>
+                </div>
+
+                <div className="detail-section">
+                  <h3>Issues</h3>
+                  {selectedEvent.issues.length === 0 ? (
+                    <div className="empty-state">No active issues for this event.</div>
+                  ) : (
+                    <div className="issue-list">
+                      {selectedEvent.issues.map((issue) => (
+                        <div key={issue.label} className={`issue-card tone-${SEVERITY_META[issue.severity].tone}`}>
+                          <div className="issue-card-topline">
+                            <span className={`pill tone-${SEVERITY_META[issue.severity].tone}`}>
+                              {issue.label}
+                            </span>
+                          </div>
+                          <p>{issue.message}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="detail-section">
+                  <h3>Milestones</h3>
+                  <div className="milestone-list">
+                    {selectedEvent.milestones.map((milestone) => {
+                      const status = milestoneStatus(milestone.date, milestone.done);
+                      const conflict =
+                        selectedEvent.owner !== "TBD" &&
+                        vacationLookup[selectedEvent.owner]?.has(milestone.date);
+
+                      return (
+                        <div key={milestone.label} className="milestone-row">
+                          <div className="milestone-main">
+                            <strong>{milestone.label}</strong>
+                            <span>{formatShortDate(milestone.date)}</span>
+                          </div>
+                          <div className="milestone-meta">
+                            <span className={`pill tone-${STATUS_META[status].tone}`}>
+                              {STATUS_META[status].label}
+                            </span>
+                            {conflict && (
+                              <span className="pill tone-critical">Owner away</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </>
+            ) : (
+              <div className="empty-state">No events match the current filters.</div>
             )}
           </div>
-        </section>
 
-        {activeTab === "calendar" && (
-          <section className="page-grid">
-            <div className="panel calendar-panel">
-              <div className="panel-header">
-                <div>
-                  <div className="panel-kicker">Calendar view</div>
-                  <h2>{formatMonthLabel(selectedMonth)}</h2>
-                </div>
-                <div className="chip-row">
-                  {months.map((month) => (
-                    <button
-                      key={month}
-                      type="button"
-                      className={month === selectedMonth ? "chip active" : "chip"}
-                      onClick={() => setSelectedMonth(month)}
-                    >
-                      {formatMonthLabel(month)}
-                    </button>
-                  ))}
-                </div>
+          <div className="directory-panel">
+            <div className="section-header">
+              <div>
+                <div className="eyebrow">Event directory</div>
+                <h2>What each event represents</h2>
               </div>
+            </div>
 
-              <div className="calendar-headings">
-                {DAY_NAMES.map((dayName) => (
-                  <div key={dayName} className="calendar-heading">
-                    {dayName}
+            <div className="directory-list">
+              {visibleEvents.map((event) => (
+                <button
+                  key={event.id}
+                  type="button"
+                  className={event.id === selectedEvent?.id ? "directory-item active" : "directory-item"}
+                  onClick={() => focusEvent(event.id, event.eventDate)}
+                >
+                  <div className="directory-item-topline">
+                    <span className="event-code">{event.code}</span>
+                    <span className={`pill ${toneForEvent(event)}`}>
+                      {event.issueCount > 0 ? `${event.issueCount} issue${event.issueCount === 1 ? "" : "s"}` : "On track"}
+                    </span>
                   </div>
-                ))}
-              </div>
-
-              <div className="calendar-grid">
-                {calendarCells.map((cell) => {
-                  const dayItems = scheduleItems.filter((item) => item.date === cell.date);
-                  const dayState =
-                    cell.date === TODAY ? "today" : cell.date === selectedDay ? "selected" : "";
-
-                  return (
-                    <button
-                      key={cell.date}
-                      type="button"
-                      className={[
-                        "calendar-day",
-                        cell.inMonth ? "" : "calendar-day-muted",
-                        dayState,
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                      onClick={() => setSelectedDay(cell.date)}
-                    >
-                      <span className="calendar-day-number">{parseDate(cell.date).getDate()}</span>
-                      <div className="calendar-day-stack">
-                        {dayItems.slice(0, 3).map((item) => (
-                          <span
-                            key={item.id}
-                            className={`mini-chip ${scheduleItemTone(item)}`}
-                          >
-                            {item.type === "event-day" ? item.theme : item.title}
-                          </span>
-                        ))}
-                        {dayItems.length > 3 && (
-                          <span className="mini-chip tone-neutral">+{dayItems.length - 3} more</span>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <aside className="panel day-panel">
-              <div className="panel-header">
-                <div>
-                  <div className="panel-kicker">Selected day</div>
-                  <h2>{formatDayLabel(selectedDay)}</h2>
-                </div>
-              </div>
-
-              <div className="day-summary">
-                <div className="summary-pill">
-                  <span className="summary-pill-value">{selectedDayItems.length}</span>
-                  <span className="summary-pill-label">items</span>
-                </div>
-                <div className="summary-pill">
-                  <span className="summary-pill-value">{unownedCount}</span>
-                  <span className="summary-pill-label">events need owner</span>
-                </div>
-              </div>
-
-              <div className="agenda-list">
-                {selectedDayItems.length === 0 && (
-                  <div className="empty-state">
-                    No milestones or events on this date. Try a highlighted day in the month grid.
+                  <strong>{event.theme}</strong>
+                  <div className="directory-item-meta">
+                    <span>{formatShortDate(event.eventDate)}</span>
+                    <span>{event.owner}</span>
                   </div>
-                )}
-
-                {selectedDayItems.map((item) => (
-                  <article key={item.id} className="agenda-card">
-                    <div className="agenda-topline">
-                      <span className={`badge ${scheduleItemTone(item)}`}>
-                        {item.type === "marker"
-                          ? "Ops note"
-                          : item.type === "vacation"
-                            ? "Vacation"
-                            : item.type === "return"
-                              ? "Return"
-                          : item.type === "event-day"
-                            ? "Event day"
-                            : STATUS_META[item.status].label}
-                      </span>
-                      {item.owner !== "Ops" && (
-                        <span className={`owner-tag owner-${OWNER_META[item.owner] ?? "slate"}`}>
-                          {item.owner}
-                        </span>
-                      )}
-                    </div>
-                    <h3>{item.title}</h3>
-                    <p>{item.detail}</p>
-                    {item.tentative && <div className="micro-note">Tentative event slot</div>}
-                  </article>
-                ))}
-              </div>
-            </aside>
-          </section>
-        )}
-
-        {activeTab === "operations" && (
-          <section className="page-grid">
-            <div className="panel">
-              <div className="panel-header">
-                <div>
-                  <div className="panel-kicker">Operations board</div>
-                  <h2>Event readiness at a glance</h2>
-                </div>
-              </div>
-
-              <div className="event-grid">
-                {visibleEvents.map((event, index) => {
-                  const health = eventHealth(event);
-                  const nextMilestone = nextOpenMilestone(event);
-                  return (
-                    <article
-                      key={event.id}
-                      className="event-card"
-                      style={{ animationDelay: `${index * 60}ms` }}
-                    >
-                      <div className="event-card-topline">
-                        <span className="series-chip">{event.seriesNumber}</span>
-                        <span className={`badge tone-${STATUS_META[health].tone}`}>{STATUS_META[health].label}</span>
-                      </div>
-
-                      <div className="event-heading">
-                        <div>
-                          <h3>{event.theme}</h3>
-                          <p>
-                            {formatShortDate(event.eventDate)} · {event.owner}
-                          </p>
-                        </div>
-                        {event.tentative && <span className="ghost-chip">Tentative</span>}
-                      </div>
-
-                      <div className="progress-shell">
-                        <div className="progress-meta">
-                          <span>Completion</span>
-                          <strong>{completionRatio(event)}%</strong>
-                        </div>
-                        <div className="progress-bar">
-                          <span style={{ width: `${completionRatio(event)}%` }} />
-                        </div>
-                      </div>
-
-                      <div className="milestone-stack">
-                        {event.milestones.map((milestone) => {
-                          const status = milestoneStatus(milestone.date, milestone.done);
-                          return (
-                            <button
-                              key={milestone.label}
-                              type="button"
-                              className="milestone-row"
-                              onClick={() => toggleMilestone(event.id, milestone.label)}
-                            >
-                              <span className={`checkmark ${milestone.done ? "checked" : ""}`} />
-                              <span className="milestone-copy">
-                                <span>{milestone.label}</span>
-                                <small>{formatShortDate(milestone.date)}</small>
-                              </span>
-                              <span className={`badge tone-${STATUS_META[status].tone}`}>
-                                {STATUS_META[status].label}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      <div className="event-footer">
-                        <span>Next up</span>
-                        <strong>{nextMilestone ? `${nextMilestone.label} on ${formatShortDate(nextMilestone.date)}` : "All clear"}</strong>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
+                </button>
+              ))}
             </div>
-
-            <aside className="panel side-rail">
-              <div className="panel-header">
-                <div>
-                  <div className="panel-kicker">Pressure points</div>
-                  <h2>What needs attention next</h2>
-                </div>
-              </div>
-
-              <div className="hot-list">
-                {urgentItems.slice(0, 7).map((item) => (
-                  <article key={item.id} className="hot-item">
-                    <div className="hot-item-top">
-                      <span className={`badge tone-${STATUS_META[item.status].tone}`}>{STATUS_META[item.status].label}</span>
-                      <span className={`owner-tag owner-${OWNER_META[item.owner] ?? "slate"}`}>{item.owner}</span>
-                    </div>
-                    <h3>{item.title}</h3>
-                    <p>{formatDayLabel(item.date)}</p>
-                  </article>
-                ))}
-                {urgentItems.length === 0 && (
-                  <div className="empty-state">No urgent or overdue milestones in the current owner filter.</div>
-                )}
-              </div>
-            </aside>
-          </section>
-        )}
-
-        {activeTab === "marketing" && (
-          <section className="page-grid marketing-layout">
-            <div className="panel">
-              <div className="panel-header">
-                <div>
-                  <div className="panel-kicker">Marketing system</div>
-                  <h2>Weekly content pipeline</h2>
-                </div>
-              </div>
-
-              <div className="marketing-summary">
-                {Object.entries(MARKETING_STATUS_META).map(([statusId, meta]) => (
-                  <article key={statusId} className="summary-card">
-                    <span className={`badge tone-${meta.tone}`}>{meta.label}</span>
-                    <strong>{marketing.filter((item) => item.status === statusId).length}</strong>
-                    <p>{statusId} items</p>
-                  </article>
-                ))}
-              </div>
-
-              <div className="marketing-groups">
-                {groupedMarketing(visibleMarketing).map(([weekLabel, items]) => (
-                  <section key={weekLabel} className="week-block">
-                    <div className="week-header">
-                      <div>
-                        <div className="panel-kicker">Week</div>
-                        <h3>{weekLabel}</h3>
-                      </div>
-                      <span className="ghost-chip">{items.length} items</span>
-                    </div>
-
-                    <div className="marketing-stack">
-                      {items.map((item) => (
-                        <article key={item.id} className="marketing-card">
-                          <div className="marketing-meta">
-                            <span className={`owner-tag owner-${PLATFORM_META[item.platform]}`}>{item.platform}</span>
-                            <span className={`owner-tag owner-${OWNER_META[item.owner] ?? "slate"}`}>{item.owner}</span>
-                          </div>
-                          <div className="marketing-copy">
-                            <h4>{item.type}</h4>
-                            <p>{item.event}</p>
-                          </div>
-                          <button
-                            type="button"
-                            className={`status-toggle tone-${MARKETING_STATUS_META[item.status].tone}`}
-                            onClick={() => cycleMarketingStatus(item.id)}
-                          >
-                            {MARKETING_STATUS_META[item.status].label}
-                          </button>
-                        </article>
-                      ))}
-                    </div>
-                  </section>
-                ))}
-                {visibleMarketing.length === 0 && (
-                  <div className="empty-state">No marketing tasks match the current filters.</div>
-                )}
-              </div>
-            </div>
-
-            <aside className="panel side-rail">
-              <div className="panel-header">
-                <div>
-                  <div className="panel-kicker">Notes</div>
-                  <h2>How to use this board</h2>
-                </div>
-              </div>
-              <div className="notes-stack">
-                <article className="note-card">
-                  <h3>Calendar-led execution</h3>
-                  <p>
-                    Use the Calendar tab to review event pressure before posting. The
-                    marketing plan stays closer to launch windows when operations dates move.
-                  </p>
-                </article>
-                <article className="note-card">
-                  <h3>Status control</h3>
-                  <p>
-                    Click any marketing status chip to cycle it from To do to Drafted,
-                    Posted, and Behind.
-                  </p>
-                </article>
-                <article className="note-card">
-                  <h3>Vacation overlay</h3>
-                  <p>
-                    Sandy, Patrice, and Andy travel dates are logged directly in the
-                    calendar, and the Sandy, Patrice, and Vacations chips can be toggled
-                    on or off without losing the rest of the board.
-                  </p>
-                </article>
-              </div>
-            </aside>
-          </section>
-        )}
-      </main>
+          </div>
+        </aside>
+      </section>
     </div>
   );
 }
