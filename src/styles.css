@@ -578,6 +578,29 @@ button {
   padding: 0.9rem;
 }
 
+.directory-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+}
+
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.26rem 0.58rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+.owner-chip {
+  font-weight: 700;
+}
+
 .directory-list,
 .issue-list,
 .milestone-list {

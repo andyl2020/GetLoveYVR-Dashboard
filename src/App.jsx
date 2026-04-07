@@ -186,10 +186,6 @@ function directoryEventName(event) {
   return `${event.code}: ${label}`;
 }
 
-function directoryEventMeta(event) {
-  return `${formatShortDate(event.eventDate)} - ${event.owner} - ${event.theme}`;
-}
-
 function clipVacationBlockToMonth(block, selectedMonth) {
   const [year, month] = selectedMonth.split("-").map(Number);
   const monthStart = `${selectedMonth}-01`;
@@ -778,7 +774,7 @@ export default function App() {
             <div className="section-header">
               <div>
                 <div className="eyebrow">Event directory</div>
-                <h2>What each event represents</h2>
+                <h2>Event themes</h2>
               </div>
             </div>
 
@@ -796,7 +792,12 @@ export default function App() {
                     </span>
                   </div>
                   <strong>{directoryEventName(event)}</strong>
-                  <div className="directory-item-meta">{directoryEventMeta(event)}</div>
+                  <div className="directory-item-meta">
+                    <span className="meta-chip">{formatShortDate(event.eventDate)}</span>
+                    <span className={`meta-chip owner-chip owner-${OWNER_TONES[event.owner] ?? "slate"}`}>
+                      {event.owner}
+                    </span>
+                  </div>
                 </button>
               ))}
             </div>
