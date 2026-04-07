@@ -1,5 +1,73 @@
 export const TODAY = "2026-04-07";
 
+export const MILESTONE_PLAYBOOK = {
+  alignment: {
+    label: "Event Alignment",
+    timing: "5 weeks before",
+    summary:
+      "Agree on the event direction at a high level so the team is aligned on what this event is.",
+    outputs: [
+      { id: "direction", label: "High-level event concept is agreed" },
+      { id: "positioning", label: "Event positioning or talking points are written down" },
+    ],
+  },
+  venueLocked: {
+    label: "Venue Locked",
+    timing: "4 weeks before",
+    summary:
+      "The venue is committed, the booking is real, and the operating details are locked.",
+    outputs: [
+      { id: "booked", label: "Venue is booked" },
+      { id: "deposit", label: "Deposit is paid" },
+      { id: "schedule", label: "Date and time are locked" },
+    ],
+  },
+  kickoff: {
+    label: "Kickoff",
+    timing: "3 weeks before",
+    summary:
+      "Launch marketing so the event is live publicly and promotion has actually started.",
+    outputs: [
+      { id: "flock", label: "Flock event is posted" },
+      { id: "social", label: "Instagram / TikTok promotion has started" },
+      { id: "content", label: "1-3 event-specific TikToks or reels are live" },
+    ],
+  },
+  finalCheck: {
+    label: "Final Check",
+    timing: "6 days before",
+    summary:
+      "Run the pre-event call or check-in so any last-minute blockers are visible before the event.",
+    outputs: [
+      { id: "checkin", label: "Call or check-in is completed" },
+      { id: "followups", label: "Final action items are confirmed or assigned" },
+    ],
+  },
+  eventDay: {
+    label: "Event Day",
+    timing: "Sunday",
+    summary: "The live event happens on Sunday.",
+    outputs: [{ id: "live", label: "Event day is completed" }],
+  },
+};
+
+function createMilestone(type, date, completedOutputIds = []) {
+  const template = MILESTONE_PLAYBOOK[type];
+  const completedSet =
+    completedOutputIds === true
+      ? new Set(template.outputs.map((output) => output.id))
+      : new Set(completedOutputIds);
+
+  return {
+    type,
+    date,
+    outputs: template.outputs.map((output) => ({
+      ...output,
+      done: completedSet.has(output.id),
+    })),
+  };
+}
+
 export const EVENTS = [
   {
     id: 1,
@@ -9,11 +77,11 @@ export const EVENTS = [
     eventDate: "2026-04-26",
     tentative: false,
     milestones: [
-      { label: "Alignment", date: "2026-03-22", done: true },
-      { label: "Venue Locked", date: "2026-03-29", done: true },
-      { label: "Kickoff", date: "2026-04-05", done: true },
-      { label: "Final Check", date: "2026-04-20", done: false },
-      { label: "Event Day", date: "2026-04-26", done: false },
+      createMilestone("alignment", "2026-03-22", true),
+      createMilestone("venueLocked", "2026-03-29", true),
+      createMilestone("kickoff", "2026-04-05", true),
+      createMilestone("finalCheck", "2026-04-20"),
+      createMilestone("eventDay", "2026-04-26"),
     ],
   },
   {
@@ -24,11 +92,11 @@ export const EVENTS = [
     eventDate: "2026-05-03",
     tentative: false,
     milestones: [
-      { label: "Alignment", date: "2026-03-29", done: true },
-      { label: "Venue Locked", date: "2026-04-05", done: true },
-      { label: "Kickoff", date: "2026-04-12", done: false },
-      { label: "Final Check", date: "2026-04-27", done: false },
-      { label: "Event Day", date: "2026-05-03", done: false },
+      createMilestone("alignment", "2026-03-29", true),
+      createMilestone("venueLocked", "2026-04-05", true),
+      createMilestone("kickoff", "2026-04-12"),
+      createMilestone("finalCheck", "2026-04-27"),
+      createMilestone("eventDay", "2026-05-03"),
     ],
   },
   {
@@ -39,11 +107,11 @@ export const EVENTS = [
     eventDate: "2026-05-10",
     tentative: false,
     milestones: [
-      { label: "Alignment", date: "2026-04-05", done: true },
-      { label: "Venue Locked", date: "2026-04-12", done: false },
-      { label: "Kickoff", date: "2026-04-19", done: false },
-      { label: "Final Check", date: "2026-05-04", done: false },
-      { label: "Event Day", date: "2026-05-10", done: false },
+      createMilestone("alignment", "2026-04-05", true),
+      createMilestone("venueLocked", "2026-04-12"),
+      createMilestone("kickoff", "2026-04-19"),
+      createMilestone("finalCheck", "2026-05-04"),
+      createMilestone("eventDay", "2026-05-10"),
     ],
   },
   {
@@ -54,11 +122,11 @@ export const EVENTS = [
     eventDate: "2026-05-24",
     tentative: false,
     milestones: [
-      { label: "Alignment", date: "2026-04-19", done: false },
-      { label: "Venue Locked", date: "2026-04-26", done: false },
-      { label: "Kickoff", date: "2026-05-03", done: false },
-      { label: "Final Check", date: "2026-05-18", done: false },
-      { label: "Event Day", date: "2026-05-24", done: false },
+      createMilestone("alignment", "2026-04-19"),
+      createMilestone("venueLocked", "2026-04-26"),
+      createMilestone("kickoff", "2026-05-03"),
+      createMilestone("finalCheck", "2026-05-18"),
+      createMilestone("eventDay", "2026-05-24"),
     ],
   },
   {
@@ -69,11 +137,11 @@ export const EVENTS = [
     eventDate: "2026-05-31",
     tentative: true,
     milestones: [
-      { label: "Alignment", date: "2026-04-26", done: false },
-      { label: "Venue Locked", date: "2026-05-03", done: false },
-      { label: "Kickoff", date: "2026-05-10", done: false },
-      { label: "Final Check", date: "2026-05-25", done: false },
-      { label: "Event Day", date: "2026-05-31", done: false },
+      createMilestone("alignment", "2026-04-26"),
+      createMilestone("venueLocked", "2026-05-03"),
+      createMilestone("kickoff", "2026-05-10"),
+      createMilestone("finalCheck", "2026-05-25"),
+      createMilestone("eventDay", "2026-05-31"),
     ],
   },
   {
@@ -84,11 +152,11 @@ export const EVENTS = [
     eventDate: "2026-06-07",
     tentative: true,
     milestones: [
-      { label: "Alignment", date: "2026-05-03", done: false },
-      { label: "Venue Locked", date: "2026-05-10", done: false },
-      { label: "Kickoff", date: "2026-05-17", done: false },
-      { label: "Final Check", date: "2026-06-01", done: false },
-      { label: "Event Day", date: "2026-06-07", done: false },
+      createMilestone("alignment", "2026-05-03"),
+      createMilestone("venueLocked", "2026-05-10"),
+      createMilestone("kickoff", "2026-05-17"),
+      createMilestone("finalCheck", "2026-06-01"),
+      createMilestone("eventDay", "2026-06-07"),
     ],
   },
   {
@@ -99,11 +167,11 @@ export const EVENTS = [
     eventDate: "2026-06-21",
     tentative: false,
     milestones: [
-      { label: "Alignment", date: "2026-05-17", done: false },
-      { label: "Venue Locked", date: "2026-05-24", done: false },
-      { label: "Kickoff", date: "2026-05-31", done: false },
-      { label: "Final Check", date: "2026-06-15", done: false },
-      { label: "Event Day", date: "2026-06-21", done: false },
+      createMilestone("alignment", "2026-05-17"),
+      createMilestone("venueLocked", "2026-05-24"),
+      createMilestone("kickoff", "2026-05-31"),
+      createMilestone("finalCheck", "2026-06-15"),
+      createMilestone("eventDay", "2026-06-21"),
     ],
   },
   {
@@ -114,11 +182,11 @@ export const EVENTS = [
     eventDate: "2026-06-28",
     tentative: false,
     milestones: [
-      { label: "Alignment", date: "2026-05-24", done: false },
-      { label: "Venue Locked", date: "2026-05-31", done: false },
-      { label: "Kickoff", date: "2026-06-07", done: false },
-      { label: "Final Check", date: "2026-06-22", done: false },
-      { label: "Event Day", date: "2026-06-28", done: false },
+      createMilestone("alignment", "2026-05-24"),
+      createMilestone("venueLocked", "2026-05-31"),
+      createMilestone("kickoff", "2026-06-07"),
+      createMilestone("finalCheck", "2026-06-22"),
+      createMilestone("eventDay", "2026-06-28"),
     ],
   },
 ];

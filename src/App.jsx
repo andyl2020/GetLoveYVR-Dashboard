@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { EVENTS, TODAY, VACATION_BLOCKS } from "./data";
+import { EVENTS, MILESTONE_PLAYBOOK, TODAY, VACATION_BLOCKS } from "./data";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const OUTPUT_STORAGE_KEY = "getloveyvr-output-progress-v1";
 
 const FILTER_OPTIONS = [
   { id: "sandy", label: "Sandy events", tone: "rose" },
@@ -135,6 +136,28 @@ function buildMonthOptions(events) {
   return [...new Set([monthKey(TODAY), ...events.map((event) => monthKey(event.eventDate))])].sort();
 }
 
+function readOutputState() {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const stored = window.localStorage.getItem(OUTPUT_STORAGE_KEY);
+    if (!stored) {
+      return {};
+    }
+
+    const parsed = JSON.parse(stored);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function outputStateKey(eventId, milestoneType, outputId) {
+  return `${eventId}:${milestoneType}:${outputId}`;
+}
+
 function milestoneStatus(dateString, done) {
   if (done) {
     return "done";
@@ -155,10 +178,16 @@ function eventCode(event) {
 }
 
 function eventDisplayName(event) {
-  if (event.id === 1) {
-    return "Singles Event #1";
-  }
-  return event.theme;
+  return `Singles Event #${event.id}: ${event.theme}`;
+}
+
+function directoryEventName(event) {
+  const label = event.id === 1 ? `${event.theme} event` : event.theme;
+  return `${event.code}: ${label}`;
+}
+
+function directoryEventMeta(event) {
+  return `${formatShortDate(event.eventDate)} - ${event.owner} - ${event.theme}`;
 }
 
 function clipVacationBlockToMonth(block, selectedMonth) {
@@ -179,17 +208,53 @@ function clipVacationBlockToMonth(block, selectedMonth) {
   };
 }
 
-function buildEventModels(events, vacationLookup) {
+function resolveMilestones(event, outputState) {
+  return event.milestones.map((milestone) => {
+    const template = MILESTONE_PLAYBOOK[milestone.type];
+    const outputs = milestone.outputs.map((output) => {
+      const stateKey = outputStateKey(event.id, milestone.type, output.id);
+      const done = outputState[stateKey] ?? output.done;
+
+      return {
+        ...output,
+        done,
+        stateKey,
+      };
+    });
+
+    return {
+      ...milestone,
+      label: template.label,
+      timing: template.timing,
+      summary: template.summary,
+      outputs,
+      outputCount: outputs.length,
+      doneCount: outputs.filter((output) => output.done).length,
+      done: outputs.length > 0 ? outputs.every((output) => output.done) : false,
+    };
+  });
+}
+
+function buildMilestoneTooltip(milestone) {
+  return [
+    `${milestone.label} - ${milestone.timing}`,
+    milestone.summary,
+    `Required outputs: ${milestone.outputs.map((output) => output.label).join("; ")}`,
+  ].join("\n");
+}
+
+function buildEventModels(events, vacationLookup, outputState) {
   return [...events]
     .sort((left, right) => left.eventDate.localeCompare(right.eventDate))
     .map((event) => {
+      const milestones = resolveMilestones(event, outputState);
       const issues = [];
       const ownerVacationDays = vacationLookup[event.owner] ?? new Set();
-      const overdueMilestones = event.milestones.filter(
+      const overdueMilestones = milestones.filter(
         (milestone) => !milestone.done && milestoneStatus(milestone.date, milestone.done) === "overdue",
       );
-      const nextMilestone = event.milestones.find((milestone) => !milestone.done) ?? null;
-      const vacationConflicts = event.milestones.filter(
+      const nextMilestone = milestones.find((milestone) => !milestone.done) ?? null;
+      const vacationConflicts = milestones.filter(
         (milestone) => !milestone.done && ownerVacationDays.has(milestone.date),
       );
       const daysUntilEvent = daysBetween(parseDate(event.eventDate), parseDate(TODAY));
@@ -200,7 +265,7 @@ function buildEventModels(events, vacationLookup) {
           label: "Overdue milestone",
           message:
             overdueMilestones.length === 1
-              ? `${overdueMilestones[0].label} is overdue.`
+              ? `${overdueMilestones[0].label} is overdue (${overdueMilestones[0].doneCount}/${overdueMilestones[0].outputCount} outputs done).`
               : `${overdueMilestones.length} milestones are overdue.`,
         });
       }
@@ -211,7 +276,7 @@ function buildEventModels(events, vacationLookup) {
           label: "Owner conflict",
           message:
             vacationConflicts.length === 1
-              ? `${event.owner} is away during ${vacationConflicts[0].label}.`
+              ? `${event.owner} is away when ${vacationConflicts[0].label} is due.`
               : `${event.owner} is away during ${vacationConflicts.length} milestones.`,
         });
       }
@@ -220,7 +285,7 @@ function buildEventModels(events, vacationLookup) {
         issues.push({
           severity: "warning",
           label: "Due soon",
-          message: `${nextMilestone.label} is due ${formatShortDate(nextMilestone.date)}.`,
+          message: `${nextMilestone.label} is due ${formatShortDate(nextMilestone.date)} (${nextMilestone.doneCount}/${nextMilestone.outputCount} outputs done).`,
         });
       }
 
@@ -236,12 +301,13 @@ function buildEventModels(events, vacationLookup) {
         ? "critical"
         : issues.length > 0
           ? "warning"
-          : event.milestones.every((milestone) => milestone.done)
+          : milestones.every((milestone) => milestone.done)
             ? "done"
             : "healthy";
 
       return {
         ...event,
+        milestones,
         code: eventCode(event),
         displayName: eventDisplayName(event),
         nextMilestone,
@@ -259,7 +325,7 @@ function buildAlerts(eventModels) {
         ...issue,
         eventId: event.id,
         code: event.code,
-        theme: event.theme,
+        displayName: event.displayName,
         owner: event.owner,
         eventDate: event.eventDate,
       })),
@@ -279,6 +345,7 @@ function toneForEvent(event) {
 export default function App() {
   const [selectedMonth, setSelectedMonth] = useState(monthKey(TODAY));
   const [selectedEventId, setSelectedEventId] = useState(null);
+  const [outputState, setOutputState] = useState(() => readOutputState());
   const [filters, setFilters] = useState({
     sandy: true,
     patrice: true,
@@ -288,7 +355,7 @@ export default function App() {
 
   const monthOptions = buildMonthOptions(EVENTS);
   const vacationLookup = buildVacationLookup(VACATION_BLOCKS);
-  const eventModels = buildEventModels(EVENTS, vacationLookup);
+  const eventModels = buildEventModels(EVENTS, vacationLookup, outputState);
   const visibleEvents = eventModels.filter((event) => {
     if (!filters.sandy && event.owner === "Sandy") {
       return false;
@@ -335,6 +402,14 @@ export default function App() {
     }
   }, [monthEvents, selectedEventId, visibleEvents]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(OUTPUT_STORAGE_KEY, JSON.stringify(outputState));
+  }, [outputState]);
+
   function focusEvent(eventId, eventDate) {
     setSelectedMonth(monthKey(eventDate));
     setSelectedEventId(eventId);
@@ -356,6 +431,19 @@ export default function App() {
     }
   }
 
+  function toggleOutput(eventId, milestoneType, outputId) {
+    const stateKey = outputStateKey(eventId, milestoneType, outputId);
+    const event = EVENTS.find((item) => item.id === eventId);
+    const milestone = event?.milestones.find((item) => item.type === milestoneType);
+    const output = milestone?.outputs.find((item) => item.id === outputId);
+    const fallbackValue = output?.done ?? false;
+
+    setOutputState((current) => ({
+      ...current,
+      [stateKey]: !(current[stateKey] ?? fallbackValue),
+    }));
+  }
+
   return (
     <div className="app-shell">
       <div className="backdrop-orb backdrop-orb-a" />
@@ -366,8 +454,8 @@ export default function App() {
           <div className="eyebrow">GetLoveYVR</div>
           <h1>Event calendar</h1>
           <p>
-            Events live in the calendar, vacations live in availability, and anything
-            wrong shows up in alerts first.
+            Events live in the calendar, vacations live in availability, and milestone
+            status only turns done when the required outputs are checked off.
           </p>
         </div>
         <div className="header-meta">
@@ -406,7 +494,7 @@ export default function App() {
                     {alert.label}
                   </span>
                 </div>
-                <strong>{alert.theme}</strong>
+                <strong>{alert.displayName}</strong>
                 <p>{alert.message}</p>
               </button>
             ))}
@@ -466,7 +554,7 @@ export default function App() {
                         key={block.id}
                         className={`availability-chip tone-${block.tone}`}
                       >
-                        {block.label} · {formatDateRange(block.start, block.end)}
+                        {block.label} - {formatDateRange(block.start, block.end)}
                       </span>
                     ))
                   )}
@@ -617,6 +705,10 @@ export default function App() {
 
                 <div className="detail-section">
                   <h3>Milestones</h3>
+                  <p className="milestone-section-note">
+                    Each milestone has a definition, timing rule, and required outputs.
+                    A step only turns done when every output below is checked off.
+                  </p>
                   <div className="milestone-list">
                     {selectedEvent.milestones.map((milestone) => {
                       const status = milestoneStatus(milestone.date, milestone.done);
@@ -625,18 +717,51 @@ export default function App() {
                         vacationLookup[selectedEvent.owner]?.has(milestone.date);
 
                       return (
-                        <div key={milestone.label} className="milestone-row">
+                        <div key={milestone.type} className="milestone-row">
                           <div className="milestone-main">
-                            <strong>{milestone.label}</strong>
-                            <span>{formatShortDate(milestone.date)}</span>
+                            <div className="milestone-title-group">
+                              <strong>{milestone.label}</strong>
+                              <div className="milestone-subline">
+                                <span>{milestone.timing}</span>
+                                <span>{formatShortDate(milestone.date)}</span>
+                                <span
+                                  className="info-chip"
+                                  title={buildMilestoneTooltip(milestone)}
+                                  aria-label={`About ${milestone.label}`}
+                                >
+                                  ?
+                                </span>
+                              </div>
+                            </div>
                           </div>
+                          <p className="milestone-description">{milestone.summary}</p>
                           <div className="milestone-meta">
                             <span className={`pill tone-${STATUS_META[status].tone}`}>
                               {STATUS_META[status].label}
                             </span>
+                            <span className="pill tone-neutral">
+                              {milestone.doneCount}/{milestone.outputCount} outputs
+                            </span>
                             {conflict && (
                               <span className="pill tone-critical">Owner away</span>
                             )}
+                          </div>
+                          <div className="output-list">
+                            {milestone.outputs.map((output) => (
+                              <label
+                                key={output.id}
+                                className={output.done ? "output-item done" : "output-item"}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={output.done}
+                                  onChange={() =>
+                                    toggleOutput(selectedEvent.id, milestone.type, output.id)
+                                  }
+                                />
+                                <span>{output.label}</span>
+                              </label>
+                            ))}
                           </div>
                         </div>
                       );
@@ -666,16 +791,12 @@ export default function App() {
                   onClick={() => focusEvent(event.id, event.eventDate)}
                 >
                   <div className="directory-item-topline">
-                    <span className="event-code">{event.code}</span>
                     <span className={`pill ${toneForEvent(event)}`}>
                       {event.issueCount > 0 ? `${event.issueCount} issue${event.issueCount === 1 ? "" : "s"}` : "On track"}
                     </span>
                   </div>
-                  <strong>{event.displayName}</strong>
-                  <div className="directory-item-meta">
-                    <span>{formatShortDate(event.eventDate)}</span>
-                    <span>{event.owner} · {event.theme}</span>
-                  </div>
+                  <strong>{directoryEventName(event)}</strong>
+                  <div className="directory-item-meta">{directoryEventMeta(event)}</div>
                 </button>
               ))}
             </div>
