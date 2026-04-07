@@ -30,7 +30,6 @@ export const MILESTONE_PLAYBOOK = {
     outputs: [
       { id: "flock", label: "Flock event is posted" },
       { id: "social", label: "Instagram / TikTok promotion has started" },
-      { id: "content", label: "1-3 event-specific TikToks or reels are live" },
     ],
   },
   finalCheck: {
@@ -41,6 +40,7 @@ export const MILESTONE_PLAYBOOK = {
     outputs: [
       { id: "checkin", label: "Call or check-in is completed" },
       { id: "followups", label: "Final action items are confirmed or assigned" },
+      { id: "content", label: "1-3 event-specific TikToks or reels are live or scheduled" },
     ],
   },
   eventDay: {
