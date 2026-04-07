@@ -1,15 +1,12 @@
 import { initializeApp } from "firebase/app";
 import {
   getAuth,
-  isSignInWithEmailLink,
+  GoogleAuthProvider,
   onAuthStateChanged,
-  sendSignInLinkToEmail,
-  signInWithEmailLink,
+  signInWithPopup,
   signOut,
 } from "firebase/auth";
 import { doc, getFirestore, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
-
-const PENDING_EMAIL_KEY = "getloveyvr-editor-email-v1";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -28,12 +25,14 @@ const dashboardDocument = import.meta.env.VITE_FIREBASE_DASHBOARD_DOCUMENT ?? "s
 let app = null;
 let auth = null;
 let db = null;
+let provider = null;
 let sharedStateRef = null;
 
 if (firebaseEnabled) {
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
   db = getFirestore(app);
+  provider = new GoogleAuthProvider();
   sharedStateRef = doc(db, dashboardCollection, dashboardDocument);
 }
 
@@ -43,35 +42,6 @@ function normalizeEmail(value) {
 
 function parseEditorEmails(value) {
   return [...new Set(value.split(",").map(normalizeEmail).filter(Boolean))];
-}
-
-function getEmailLinkUrl() {
-  if (typeof window === "undefined") {
-    return "";
-  }
-
-  return new URL(import.meta.env.BASE_URL, window.location.origin).toString();
-}
-
-function setPendingEmail(email) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  if (!email) {
-    window.localStorage.removeItem(PENDING_EMAIL_KEY);
-    return;
-  }
-
-  window.localStorage.setItem(PENDING_EMAIL_KEY, normalizeEmail(email));
-}
-
-export function getPendingEmail() {
-  if (typeof window === "undefined") {
-    return "";
-  }
-
-  return normalizeEmail(window.localStorage.getItem(PENDING_EMAIL_KEY));
 }
 
 export function isFirebaseEnabled() {
@@ -86,49 +56,12 @@ export function canEditEmail(email) {
   return editorEmails.includes(normalizeEmail(email));
 }
 
-export function isEmailLinkFlow() {
-  if (!auth || typeof window === "undefined") {
-    return false;
-  }
-
-  return isSignInWithEmailLink(auth, window.location.href);
-}
-
-export async function sendEditorSignInLink(email) {
-  if (!auth) {
+export async function signInEditorWithGoogle() {
+  if (!auth || !provider) {
     throw new Error("Firebase is not configured yet.");
   }
 
-  const normalizedEmail = normalizeEmail(email);
-  if (!normalizedEmail) {
-    throw new Error("Enter your email first.");
-  }
-
-  await sendSignInLinkToEmail(auth, normalizedEmail, {
-    url: getEmailLinkUrl(),
-    handleCodeInApp: true,
-  });
-
-  setPendingEmail(normalizedEmail);
-}
-
-export async function completeEditorSignIn(email) {
-  if (!auth || typeof window === "undefined") {
-    throw new Error("Firebase is not configured yet.");
-  }
-
-  if (!isSignInWithEmailLink(auth, window.location.href)) {
-    return null;
-  }
-
-  const normalizedEmail = normalizeEmail(email) || getPendingEmail();
-  if (!normalizedEmail) {
-    throw new Error("Enter the email address that received the sign-in link.");
-  }
-
-  const credential = await signInWithEmailLink(auth, normalizedEmail, window.location.href);
-  setPendingEmail("");
-  window.history.replaceState({}, document.title, getEmailLinkUrl());
+  const credential = await signInWithPopup(auth, provider);
   return credential.user;
 }
 
@@ -146,7 +79,6 @@ export async function signOutEditor() {
     return;
   }
 
-  setPendingEmail("");
   await signOut(auth);
 }
 

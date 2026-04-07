@@ -2,13 +2,10 @@ import { useEffect, useState } from "react";
 import { EVENTS, MILESTONE_PLAYBOOK, VACATION_BLOCKS } from "./data";
 import {
   canEditEmail,
-  completeEditorSignIn,
   getEditorEmails,
-  getPendingEmail,
-  isEmailLinkFlow,
   isFirebaseEnabled,
   saveSharedState,
-  sendEditorSignInLink,
+  signInEditorWithGoogle,
   signOutEditor,
   subscribeToAuthState,
   subscribeToSharedState,
@@ -16,7 +13,7 @@ import {
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const OUTPUT_STORAGE_KEY = "getloveyvr-output-progress-v1";
-const FALLBACK_EDITOR_EMAIL = getEditorEmails()[0] ?? "";
+const PRIMARY_EDITOR_EMAIL = getEditorEmails()[0] ?? "";
 
 const FILTER_OPTIONS = [
   { id: "sandy", label: "Sandy events", tone: "rose" },
@@ -409,22 +406,19 @@ export default function App() {
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [outputState, setOutputState] = useState(() => readOutputState());
   const [currentUser, setCurrentUser] = useState(null);
-  const [signInEmail, setSignInEmail] = useState(() => getPendingEmail() || FALLBACK_EDITOR_EMAIL);
   const [authReady, setAuthReady] = useState(() => !firebaseEnabled);
   const [authError, setAuthError] = useState("");
   const [authNotice, setAuthNotice] = useState("");
   const [syncError, setSyncError] = useState("");
   const [syncMode, setSyncMode] = useState(() => (firebaseEnabled ? "connecting" : "local"));
   const [sharedDocExists, setSharedDocExists] = useState(() => !firebaseEnabled);
-  const [isSendingLink, setIsSendingLink] = useState(false);
-  const [isCompletingSignIn, setIsCompletingSignIn] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
   const [filters, setFilters] = useState({
     sandy: true,
     patrice: true,
     vacations: true,
     issuesOnly: false,
   });
-  const emailLinkFlow = firebaseEnabled && isEmailLinkFlow();
   const editorEmail = currentUser?.email?.trim().toLowerCase() ?? "";
   const canEdit = firebaseEnabled ? canEditEmail(editorEmail) : true;
 
@@ -543,30 +537,6 @@ export default function App() {
   }, [firebaseEnabled]);
 
   useEffect(() => {
-    if (!firebaseEnabled || !emailLinkFlow) {
-      return;
-    }
-
-    const pendingEmail = getPendingEmail();
-    if (!pendingEmail) {
-      return;
-    }
-
-    setIsCompletingSignIn(true);
-    completeEditorSignIn(pendingEmail)
-      .then(() => {
-        setAuthError("");
-        setAuthNotice(`Signed in as ${pendingEmail}.`);
-      })
-      .catch((error) => {
-        setAuthError(error?.message || "Could not finish sign-in from the email link.");
-      })
-      .finally(() => {
-        setIsCompletingSignIn(false);
-      });
-  }, [emailLinkFlow, firebaseEnabled]);
-
-  useEffect(() => {
     if (!firebaseEnabled || !canEdit || !currentUser?.email || sharedDocExists) {
       return;
     }
@@ -632,7 +602,7 @@ export default function App() {
 
     try {
       setSyncMode("saving");
-      await saveSharedState(nextState, currentUser?.email ?? signInEmail);
+      await saveSharedState(nextState, currentUser?.email ?? PRIMARY_EDITOR_EMAIL);
       setSharedDocExists(true);
       setSyncMode("cloud");
     } catch (error) {
@@ -642,36 +612,24 @@ export default function App() {
     }
   }
 
-  async function handleSendSignInLink(event) {
-    event.preventDefault();
-    setIsSendingLink(true);
+  async function handleSignInWithGoogle() {
+    setIsSigningIn(true);
     setAuthError("");
     setAuthNotice("");
 
     try {
-      await sendEditorSignInLink(signInEmail);
-      setAuthNotice(`Sign-in link sent to ${signInEmail}. Open it on any device to edit.`);
-    } catch (error) {
-      setAuthError(error?.message || "Could not send the sign-in link.");
-    } finally {
-      setIsSendingLink(false);
-    }
-  }
-
-  async function handleCompleteSignIn(event) {
-    event.preventDefault();
-    setIsCompletingSignIn(true);
-    setAuthError("");
-
-    try {
-      const user = await completeEditorSignIn(signInEmail);
+      const user = await signInEditorWithGoogle();
       if (user?.email) {
-        setAuthNotice(`Signed in as ${user.email}.`);
+        setAuthNotice(
+          canEditEmail(user.email)
+            ? `Signed in as ${user.email}. Editing is enabled.`
+            : `Signed in as ${user.email}. This account is still read-only.`,
+        );
       }
     } catch (error) {
-      setAuthError(error?.message || "Could not complete sign-in.");
+      setAuthError(error?.message || "Could not open Google sign-in.");
     } finally {
-      setIsCompletingSignIn(false);
+      setIsSigningIn(false);
     }
   }
 
@@ -750,42 +708,27 @@ export default function App() {
                   </div>
                 </>
               ) : (
-                <form
-                  className="auth-form"
-                  onSubmit={emailLinkFlow ? handleCompleteSignIn : handleSendSignInLink}
-                >
-                  <label className="auth-label" htmlFor="editor-email">
-                    Editor email
-                  </label>
-                  <input
-                    id="editor-email"
-                    className="auth-input"
-                    type="email"
-                    value={signInEmail}
-                    onChange={(event) => setSignInEmail(event.target.value)}
-                    placeholder={FALLBACK_EDITOR_EMAIL || "your@email.com"}
-                    autoComplete="email"
-                  />
+                <div className="auth-form">
                   <div className="auth-actions">
                     <button
-                      type="submit"
+                      type="button"
                       className="auth-button auth-button-primary"
-                      disabled={isSendingLink || isCompletingSignIn}
+                      onClick={handleSignInWithGoogle}
+                      disabled={isSigningIn}
                     >
-                      {emailLinkFlow
-                        ? isCompletingSignIn
-                          ? "Finishing..."
-                          : "Finish sign-in"
-                        : isSendingLink
-                          ? "Sending..."
-                          : "Email me a sign-in link"}
+                      {isSigningIn ? "Opening Google..." : "Sign in with Google"}
                     </button>
                   </div>
                   <p className="sync-card-copy">
-                    Viewers do not need to sign in. Editors sign in by email link only when
-                    they need to change checklist state.
+                    Viewers do not need to sign in. Editors only need to sign in with Google
+                    when they want to change checklist state.
                   </p>
-                </form>
+                  {PRIMARY_EDITOR_EMAIL && (
+                    <p className="sync-card-copy">
+                      Expected editor account: <strong>{PRIMARY_EDITOR_EMAIL}</strong>
+                    </p>
+                  )}
+                </div>
               )
             ) : (
               <p className="sync-card-copy">Checking your sign-in session...</p>

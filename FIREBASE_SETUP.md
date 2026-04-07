@@ -3,7 +3,7 @@
 This dashboard is set up for:
 
 - Public read access for anyone with the URL
-- Email-link sign-in for editors
+- Google sign-in for editors
 - Shared checklist state stored in Firestore
 - Write access limited to the email(s) you allow
 
@@ -31,13 +31,13 @@ This dashboard is set up for:
 4. Pick a region close to you
 5. Finish setup
 
-## 4. Turn on email-link sign-in
+## 4. Turn on Google sign-in
 
 1. In the left sidebar, click `Authentication`
 2. Click `Get started` if needed
 3. Open the `Sign-in method` tab
-4. Enable `Email/Password`
-5. Turn on `Email link (passwordless sign-in)`
+4. Enable `Google`
+5. Choose a support email
 6. Save
 
 ## 5. Add allowed domains
@@ -101,7 +101,7 @@ Expected behavior:
 
 - Anyone can open the dashboard and see the saved state
 - Viewers stay read-only
-- Andy signs in with an emailed link to edit
+- Andy signs in with Google to edit
 - Changes sync across devices because Firestore stores the shared state
 
 ## 9. Deploy
