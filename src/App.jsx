@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { EVENTS, MILESTONE_PLAYBOOK, VACATION_BLOCKS } from "./data";
+import { CONTENT_TYPE_GUIDE, EVENTS, MILESTONE_PLAYBOOK, VACATION_BLOCKS } from "./data";
 import {
   canEditEmail,
   getEditorEmails,
@@ -896,10 +896,27 @@ export default function App() {
                 </div>
 
                 <div className="detail-section">
-                  <h3>Milestones</h3>
+                  <div className="detail-section-header">
+                    <h3>Milestones</h3>
+                    <details className="content-guide">
+                      <summary>Content key</summary>
+                      <div className="content-guide-list">
+                        {CONTENT_TYPE_GUIDE.map((item) => (
+                          <div key={item.code} className="content-guide-item">
+                            <div className="content-guide-topline">
+                              <span className="pill tone-info">{item.code}</span>
+                              <strong>{item.title}</strong>
+                            </div>
+                            <p>{item.description}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  </div>
                   <p className="milestone-section-note">
                     Each milestone has a definition, timing rule, and required outputs.
                     A step only turns done when every output below is checked off.
+                    Use the content key for the A / B / C / D1 / D2 labels.
                   </p>
                   <div className="milestone-list">
                     {selectedEvent.milestones.map((milestone) => {

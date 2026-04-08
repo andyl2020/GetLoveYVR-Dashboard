@@ -26,28 +26,54 @@ export const MILESTONE_PLAYBOOK = {
     label: "Kickoff",
     timing: "3 weeks before",
     summary:
-      "Launch marketing so the event is live publicly and promotion has actually started.",
+      "Kick off the event with the public-facing assets and the core reel concepts fully defined.",
     outputs: [
-      { id: "flock", label: "Flock event is posted" },
-      { id: "social", label: "Instagram / TikTok promotion has started" },
+      { id: "eventGraphicPosted", label: "(A) Event Graphic posted" },
+      { id: "eventAnnouncementScripted", label: "(B) Event Announcement Reel scripted" },
+      { id: "unhingedBrandScripted", label: "(C) Unhinged Brand Reel scripted" },
+      { id: "filmVolunteerIdentified", label: "(D1) Film Volunteer identified" },
+    ],
+  },
+  contentProduction: {
+    label: "Content Production",
+    timing: "2 weeks before",
+    summary:
+      "Get the key reels captured or sourced so launch-week scheduling is not blocked by missing content.",
+    outputs: [
+      { id: "eventAnnouncementFilmed", label: "(B) Event Announcement Reel filmed" },
+      { id: "unhingedBrandFilmed", label: "(C) Unhinged Brand Reel filmed or sourced" },
     ],
   },
   finalCheck: {
     label: "Final Check",
     timing: "6 days before",
     summary:
-      "Run the pre-event call or check-in so any last-minute blockers are visible before the event.",
+      "Confirm the content is queued and the final event check-in has happened before the last push week.",
     outputs: [
-      { id: "checkin", label: "Call or check-in is completed" },
-      { id: "followups", label: "Final action items are confirmed or assigned" },
-      { id: "content", label: "1-3 event-specific TikToks or reels are live or scheduled" },
+      { id: "eventAnnouncementScheduled", label: "(B) Event Announcement Reel scheduled" },
+      { id: "unhingedBrandScheduled", label: "(C) Unhinged Brand Reel scheduled" },
+      { id: "filmVolunteerConfirmed", label: "(D1) Film Volunteer confirmed" },
+      { id: "teamCheckinDone", label: "Sandy / Patrice check-in done" },
     ],
   },
   eventDay: {
     label: "Event Day",
-    timing: "Sunday",
-    summary: "The live event happens on Sunday.",
-    outputs: [{ id: "live", label: "Event day is completed" }],
+    timing: "Day of event",
+    summary: "Run the live event and make sure the raw material for post-event content is actually collected.",
+    outputs: [
+      { id: "eventCompleted", label: "Event completed" },
+      { id: "rawFootageCollected", label: "(D1) Raw footage collected" },
+    ],
+  },
+  postEvent: {
+    label: "Post-Event",
+    timing: "1-2 days after",
+    summary:
+      "Publish the proof and recap content while the event is still fresh and useful for the next ticket push.",
+    outputs: [
+      { id: "dayOfEventReelPosted", label: "(D1) Day of Event Reel / BTS posted" },
+      { id: "dayOfEventRecapPosted", label: "(D2) Day of Event Recap posted" },
+    ],
   },
 };
 
@@ -68,127 +94,162 @@ function createMilestone(type, date, completedOutputIds = []) {
   };
 }
 
-export const EVENTS = [
+function shiftDate(value, offsetDays) {
+  const [year, month, day] = value.split("-").map(Number);
+  const shifted = new Date(year, month - 1, day + offsetDays, 12, 0, 0);
+  const nextYear = shifted.getFullYear();
+  const nextMonth = String(shifted.getMonth() + 1).padStart(2, "0");
+  const nextDay = String(shifted.getDate()).padStart(2, "0");
+
+  return `${nextYear}-${nextMonth}-${nextDay}`;
+}
+
+function buildMilestones(eventDate, completedMilestones = {}) {
+  return [
+    createMilestone("alignment", shiftDate(eventDate, -35), completedMilestones.alignment ?? []),
+    createMilestone("venueLocked", shiftDate(eventDate, -28), completedMilestones.venueLocked ?? []),
+    createMilestone("kickoff", shiftDate(eventDate, -21), completedMilestones.kickoff ?? []),
+    createMilestone(
+      "contentProduction",
+      shiftDate(eventDate, -14),
+      completedMilestones.contentProduction ?? [],
+    ),
+    createMilestone("finalCheck", shiftDate(eventDate, -6), completedMilestones.finalCheck ?? []),
+    createMilestone("eventDay", eventDate, completedMilestones.eventDay ?? []),
+    createMilestone("postEvent", shiftDate(eventDate, 2), completedMilestones.postEvent ?? []),
+  ];
+}
+
+function createEvent({
+  id,
+  seriesNumber,
+  theme,
+  owner,
+  eventDate,
+  tentative,
+  completedMilestones = {},
+}) {
+  return {
+    id,
+    seriesNumber,
+    theme,
+    owner,
+    eventDate,
+    tentative,
+    milestones: buildMilestones(eventDate, completedMilestones),
+  };
+}
+
+export const CONTENT_TYPE_GUIDE = [
   {
+    code: "A",
+    title: "Event Graphic",
+    description:
+      "The visual announcement for the event. Gives people the key details like date, vibe, and ticket link in one post.",
+  },
+  {
+    code: "B",
+    title: "Event Announcement Reel",
+    description:
+      "You on camera explaining what the event is and why someone should come. This is the main conversion piece.",
+  },
+  {
+    code: "C",
+    title: "Unhinged Brand Reel",
+    description:
+      "Fun, personality-driven content with no sales agenda. Its job is reach, discovery, and getting new eyes on the brand.",
+  },
+  {
+    code: "D1",
+    title: "Day of Event Reel / BTS",
+    description:
+      "Raw footage from the event itself that proves the event was real and fun, building trust for the next one.",
+  },
+  {
+    code: "D2",
+    title: "Day of Event Recap",
+    description:
+      "You talking to camera after the event about what happened, how it went, and what you learned to build founder trust.",
+  },
+];
+
+export const EVENTS = [
+  createEvent({
     id: 1,
     seriesNumber: "1/8",
     theme: "Boxing",
     owner: "Sandy",
     eventDate: "2026-04-26",
     tentative: false,
-    milestones: [
-      createMilestone("alignment", "2026-03-22", true),
-      createMilestone("venueLocked", "2026-03-29", true),
-      createMilestone("kickoff", "2026-04-05", true),
-      createMilestone("finalCheck", "2026-04-20"),
-      createMilestone("eventDay", "2026-04-26"),
-    ],
-  },
-  {
+    completedMilestones: {
+      alignment: true,
+      venueLocked: true,
+      kickoff: true,
+    },
+  }),
+  createEvent({
     id: 2,
     seriesNumber: "2/8",
     theme: "Improv",
     owner: "Patrice",
     eventDate: "2026-05-03",
     tentative: false,
-    milestones: [
-      createMilestone("alignment", "2026-03-29", true),
-      createMilestone("venueLocked", "2026-04-05", true),
-      createMilestone("kickoff", "2026-04-12"),
-      createMilestone("finalCheck", "2026-04-27"),
-      createMilestone("eventDay", "2026-05-03"),
-    ],
-  },
-  {
+    completedMilestones: {
+      alignment: true,
+      venueLocked: true,
+    },
+  }),
+  createEvent({
     id: 3,
     seriesNumber: "3/8",
     theme: "Baking",
     owner: "Patrice",
     eventDate: "2026-05-10",
     tentative: false,
-    milestones: [
-      createMilestone("alignment", "2026-04-05", true),
-      createMilestone("venueLocked", "2026-04-12"),
-      createMilestone("kickoff", "2026-04-19"),
-      createMilestone("finalCheck", "2026-05-04"),
-      createMilestone("eventDay", "2026-05-10"),
-    ],
-  },
-  {
+    completedMilestones: {
+      alignment: true,
+    },
+  }),
+  createEvent({
     id: 4,
     seriesNumber: "4/8",
     theme: "Painting",
     owner: "Patrice",
     eventDate: "2026-05-24",
     tentative: false,
-    milestones: [
-      createMilestone("alignment", "2026-04-19"),
-      createMilestone("venueLocked", "2026-04-26"),
-      createMilestone("kickoff", "2026-05-03"),
-      createMilestone("finalCheck", "2026-05-18"),
-      createMilestone("eventDay", "2026-05-24"),
-    ],
-  },
-  {
+  }),
+  createEvent({
     id: 5,
     seriesNumber: "5/8",
     theme: "Social / Bingo",
     owner: "Sandy",
     eventDate: "2026-05-31",
     tentative: true,
-    milestones: [
-      createMilestone("alignment", "2026-04-26"),
-      createMilestone("venueLocked", "2026-05-03"),
-      createMilestone("kickoff", "2026-05-10"),
-      createMilestone("finalCheck", "2026-05-25"),
-      createMilestone("eventDay", "2026-05-31"),
-    ],
-  },
-  {
+  }),
+  createEvent({
     id: 6,
     seriesNumber: "6/8",
     theme: "TBD",
     owner: "TBD",
     eventDate: "2026-06-07",
     tentative: true,
-    milestones: [
-      createMilestone("alignment", "2026-05-03"),
-      createMilestone("venueLocked", "2026-05-10"),
-      createMilestone("kickoff", "2026-05-17"),
-      createMilestone("finalCheck", "2026-06-01"),
-      createMilestone("eventDay", "2026-06-07"),
-    ],
-  },
-  {
+  }),
+  createEvent({
     id: 7,
     seriesNumber: "7/8",
     theme: "TBD",
     owner: "TBD",
     eventDate: "2026-06-21",
     tentative: false,
-    milestones: [
-      createMilestone("alignment", "2026-05-17"),
-      createMilestone("venueLocked", "2026-05-24"),
-      createMilestone("kickoff", "2026-05-31"),
-      createMilestone("finalCheck", "2026-06-15"),
-      createMilestone("eventDay", "2026-06-21"),
-    ],
-  },
-  {
+  }),
+  createEvent({
     id: 8,
     seriesNumber: "8/8",
     theme: "TBD",
     owner: "TBD",
     eventDate: "2026-06-28",
     tentative: false,
-    milestones: [
-      createMilestone("alignment", "2026-05-24"),
-      createMilestone("venueLocked", "2026-05-31"),
-      createMilestone("kickoff", "2026-06-07"),
-      createMilestone("finalCheck", "2026-06-22"),
-      createMilestone("eventDay", "2026-06-28"),
-    ],
-  },
+  }),
 ];
 
 export const MARKETING = [
