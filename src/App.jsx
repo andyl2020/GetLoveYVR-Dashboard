@@ -1207,7 +1207,14 @@ export default function App() {
         </div>
 
         <aside className="sidebar">
-          <div className="detail-panel">
+          <div
+            className={[
+              "detail-panel",
+              openOwnerPickerKey ? "panel-menu-open" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          >
             <div className="section-header">
               <div className="selected-event-header">
                 <div>

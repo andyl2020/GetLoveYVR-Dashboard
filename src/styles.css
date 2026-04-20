@@ -642,6 +642,15 @@ button {
   margin-top: 1rem;
 }
 
+.sidebar {
+  position: relative;
+  isolation: isolate;
+}
+
+.detail-panel.panel-menu-open {
+  z-index: 8;
+}
+
 .calendar-headings,
 .calendar-grid {
   display: grid;
