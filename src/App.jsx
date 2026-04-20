@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   CONTENT_TYPE_GUIDE,
   EVENTS,
@@ -534,7 +534,9 @@ export default function App() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [pendingToggle, setPendingToggle] = useState(null);
   const [openOwnerPickerKey, setOpenOwnerPickerKey] = useState(null);
+  const [pickerPlacement, setPickerPlacement] = useState({ vertical: "down", horizontal: "right" });
   const [filters, setFilters] = useState(() => createDefaultFilters());
+  const openMenuRef = useRef(null);
   const editorEmail = currentUser?.email?.trim().toLowerCase() ?? "";
   const canEdit = firebaseEnabled ? canEditEmail(editorEmail) : true;
 
@@ -642,9 +644,31 @@ export default function App() {
   }, [selectedEventId]);
 
   useEffect(() => {
-    if (!openOwnerPickerKey || typeof document === "undefined") {
+    if (!openOwnerPickerKey || typeof document === "undefined" || typeof window === "undefined") {
       return undefined;
     }
+
+    function updatePlacement() {
+      const menu = openMenuRef.current;
+      if (!menu) {
+        return;
+      }
+
+      const rect = menu.getBoundingClientRect();
+      const nextPlacement = { vertical: "down", horizontal: "right" };
+
+      if (rect.bottom > window.innerHeight - 12 && rect.top > rect.height + 12) {
+        nextPlacement.vertical = "up";
+      }
+
+      if (rect.right > window.innerWidth - 12 && rect.left > rect.width + 12) {
+        nextPlacement.horizontal = "left";
+      }
+
+      setPickerPlacement(nextPlacement);
+    }
+
+    const frameId = window.requestAnimationFrame(updatePlacement);
 
     function handlePointerDown(event) {
       if (!(event.target instanceof Element) || !event.target.closest(".owner-picker-shell")) {
@@ -652,8 +676,15 @@ export default function App() {
       }
     }
 
+    window.addEventListener("resize", updatePlacement);
+    window.addEventListener("scroll", updatePlacement, true);
     document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener("resize", updatePlacement);
+      window.removeEventListener("scroll", updatePlacement, true);
+      document.removeEventListener("mousedown", handlePointerDown);
+    };
   }, [openOwnerPickerKey]);
 
   useEffect(() => {
@@ -929,6 +960,7 @@ export default function App() {
       return;
     }
 
+    setPickerPlacement({ vertical: "down", horizontal: "right" });
     setOpenOwnerPickerKey((current) => (current === pickerKey ? null : pickerKey));
   }
 
@@ -1222,7 +1254,15 @@ export default function App() {
                       individually.
                     </p>
                   </div>
-                  <div className="detail-owner-controls owner-picker-shell">
+                  <div
+                    className={[
+                      "detail-owner-controls",
+                      "owner-picker-shell",
+                      openOwnerPickerKey === "event" ? "menu-open" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
                     <button
                       type="button"
                       className={`owner-tag owner-picker-trigger owner-${ownerTone(selectedEvent.owner)}`}
@@ -1236,7 +1276,18 @@ export default function App() {
                       </span>
                     </button>
                     {openOwnerPickerKey === "event" && canEdit && (
-                      <div className="owner-picker-menu" role="menu" aria-label="Choose event owner">
+                      <div
+                        ref={openMenuRef}
+                        className={[
+                          "owner-picker-menu",
+                          pickerPlacement.vertical === "up" ? "menu-up" : "",
+                          pickerPlacement.horizontal === "left" ? "menu-left" : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        role="menu"
+                        aria-label="Choose event owner"
+                      >
                         <button
                           type="button"
                           className="owner-picker-option"
@@ -1334,6 +1385,7 @@ export default function App() {
                                 className={[
                                   "output-item",
                                   output.done ? "done" : "",
+                                  openOwnerPickerKey === output.ownerStateKey ? "menu-open" : "",
                                   !canEdit ? "locked" : "",
                                 ]
                                   .filter(Boolean)
@@ -1349,7 +1401,15 @@ export default function App() {
                                   />
                                   <span>{output.label}</span>
                                 </label>
-                                <div className="output-owner-panel owner-picker-shell">
+                                <div
+                                  className={[
+                                    "output-owner-panel",
+                                    "owner-picker-shell",
+                                    openOwnerPickerKey === output.ownerStateKey ? "menu-open" : "",
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" ")}
+                                >
                                   <span className="output-owner-label">Task owner</span>
                                   <button
                                     type="button"
@@ -1364,7 +1424,18 @@ export default function App() {
                                     </span>
                                   </button>
                                   {openOwnerPickerKey === output.ownerStateKey && canEdit && (
-                                    <div className="owner-picker-menu" role="menu" aria-label="Choose task owner">
+                                    <div
+                                      ref={openMenuRef}
+                                      className={[
+                                        "owner-picker-menu",
+                                        pickerPlacement.vertical === "up" ? "menu-up" : "",
+                                        pickerPlacement.horizontal === "left" ? "menu-left" : "",
+                                      ]
+                                        .filter(Boolean)
+                                        .join(" ")}
+                                      role="menu"
+                                      aria-label="Choose task owner"
+                                    >
                                       <button
                                         type="button"
                                         className={`owner-picker-option ${!output.assignedOwner ? "active" : ""}`}
