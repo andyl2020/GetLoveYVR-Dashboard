@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   CONTENT_TYPE_GUIDE,
   EVENTS,
@@ -20,13 +20,14 @@ const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const OUTPUT_STORAGE_KEY = "getloveyvr-output-progress-v1";
 const EVENT_OWNER_STORAGE_KEY = "getloveyvr-event-owners-v1";
 const TASK_OWNER_STORAGE_KEY = "getloveyvr-task-owners-v1";
+const TASK_TEXT_STORAGE_KEY = "getloveyvr-task-text-v1";
 const PRIMARY_EDITOR_EMAIL = getEditorEmails()[0] ?? "";
 
 const OWNER_TONES = {
   Sandy: "rose",
   Patrice: "cyan",
   Andy: "mint",
-  Stephanie: "amber",
+  Stephy: "amber",
 };
 
 function ownerFilterId(owner) {
@@ -166,6 +167,9 @@ function buildMonthOptions(events, todayKey) {
 }
 
 function normalizeAssignee(value) {
+  if (value === "Stephanie") {
+    return "Stephy";
+  }
   return OWNER_OPTIONS.includes(value) ? value : "";
 }
 
@@ -196,6 +200,18 @@ function normalizeStoredAssignmentState(rawState) {
     Object.entries(rawState)
       .map(([key, value]) => [key.replace(/:/g, "__"), normalizeAssignee(value)])
       .filter(([, value]) => Boolean(value)),
+  );
+}
+
+function normalizeStoredTextState(rawState) {
+  if (!rawState || typeof rawState !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(rawState)
+      .map(([key, value]) => [key.replace(/:/g, "__"), typeof value === "string" ? value : ""])
+      .filter(([, value]) => value.trim().length > 0),
   );
 }
 
@@ -235,6 +251,24 @@ function readAssignmentState(storageKey) {
   }
 }
 
+function readTextState(storageKey) {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const stored = window.localStorage.getItem(storageKey);
+    if (!stored) {
+      return {};
+    }
+
+    const parsed = JSON.parse(stored);
+    return normalizeStoredTextState(parsed);
+  } catch {
+    return {};
+  }
+}
+
 function outputStateKey(eventId, milestoneType, outputId) {
   return `${eventId}__${milestoneType}__${outputId}`;
 }
@@ -245,6 +279,10 @@ function eventOwnerStateKey(eventId) {
 
 function taskOwnerStateKey(eventId, milestoneType, outputId) {
   return `${eventId}__${milestoneType}__${outputId}`;
+}
+
+function taskTextStateKey(eventId, milestoneType, outputId) {
+  return `${eventId}__${milestoneType}__${outputId}__text`;
 }
 
 function resolveEventOwner(event, eventOwnerState) {
@@ -326,7 +364,7 @@ function clipVacationBlockToMonth(block, selectedMonth) {
   };
 }
 
-function resolveMilestones(event, outputState, taskOwnerState, eventOwner) {
+function resolveMilestones(event, outputState, taskOwnerState, taskTextState, eventOwner) {
   return event.milestones.map((milestone) => {
     const template = MILESTONE_PLAYBOOK[milestone.type];
     const outputs = milestone.outputs.map((output) => {
@@ -335,6 +373,8 @@ function resolveMilestones(event, outputState, taskOwnerState, eventOwner) {
       const ownerStateKey = taskOwnerStateKey(event.id, milestone.type, output.id);
       const assignedOwner = normalizeAssignee(taskOwnerState[ownerStateKey]);
       const owner = resolveTaskOwner(taskOwnerState, event.id, milestone.type, output.id, eventOwner);
+      const textStateKey = taskTextStateKey(event.id, milestone.type, output.id);
+      const textValue = taskTextState[textStateKey] ?? "";
 
       return {
         ...output,
@@ -343,6 +383,8 @@ function resolveMilestones(event, outputState, taskOwnerState, eventOwner) {
         ownerStateKey,
         assignedOwner,
         owner,
+        textStateKey,
+        textValue,
       };
     });
 
@@ -359,12 +401,20 @@ function resolveMilestones(event, outputState, taskOwnerState, eventOwner) {
   });
 }
 
-function buildEventModels(events, vacationLookup, outputState, eventOwnerState, taskOwnerState, todayKey) {
+function buildEventModels(
+  events,
+  vacationLookup,
+  outputState,
+  eventOwnerState,
+  taskOwnerState,
+  taskTextState,
+  todayKey,
+) {
   return [...events]
     .sort((left, right) => left.eventDate.localeCompare(right.eventDate))
     .map((event) => {
       const owner = resolveEventOwner(event, eventOwnerState);
-      const milestones = resolveMilestones(event, outputState, taskOwnerState, owner);
+      const milestones = resolveMilestones(event, outputState, taskOwnerState, taskTextState, owner);
       const issues = [];
       const ownerVacationDays = owner ? vacationLookup[owner] ?? new Set() : new Set();
       const overdueMilestones = milestones.filter(
@@ -473,6 +523,9 @@ export default function App() {
   const [taskOwnerState, setTaskOwnerState] = useState(() =>
     readAssignmentState(TASK_OWNER_STORAGE_KEY),
   );
+  const [taskTextState, setTaskTextState] = useState(() =>
+    readTextState(TASK_TEXT_STORAGE_KEY),
+  );
   const [currentUser, setCurrentUser] = useState(null);
   const [authError, setAuthError] = useState("");
   const [syncError, setSyncError] = useState("");
@@ -480,7 +533,9 @@ export default function App() {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [pendingToggle, setPendingToggle] = useState(null);
+  const [ownerPickerOpen, setOwnerPickerOpen] = useState(false);
   const [filters, setFilters] = useState(() => createDefaultFilters());
+  const ownerPickerRef = useRef(null);
   const editorEmail = currentUser?.email?.trim().toLowerCase() ?? "";
   const canEdit = firebaseEnabled ? canEditEmail(editorEmail) : true;
 
@@ -492,6 +547,7 @@ export default function App() {
     outputState,
     eventOwnerState,
     taskOwnerState,
+    taskTextState,
     todayKey,
   );
   const visibleEvents = eventModels.filter((event) => {
@@ -575,6 +631,33 @@ export default function App() {
   }, [taskOwnerState]);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(TASK_TEXT_STORAGE_KEY, JSON.stringify(taskTextState));
+  }, [taskTextState]);
+
+  useEffect(() => {
+    setOwnerPickerOpen(false);
+  }, [selectedEventId]);
+
+  useEffect(() => {
+    if (!ownerPickerOpen || typeof document === "undefined") {
+      return undefined;
+    }
+
+    function handlePointerDown(event) {
+      if (!ownerPickerRef.current?.contains(event.target)) {
+        setOwnerPickerOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [ownerPickerOpen]);
+
+  useEffect(() => {
     if (!firebaseEnabled) {
       return () => {};
     }
@@ -600,6 +683,7 @@ export default function App() {
           setOutputState(normalizeStoredOutputState(data.outputState));
           setEventOwnerState(normalizeStoredAssignmentState(data.eventOwnerState));
           setTaskOwnerState(normalizeStoredAssignmentState(data.taskOwnerState));
+          setTaskTextState(normalizeStoredTextState(data.taskTextState));
           setSharedDocExists(true);
         } else {
           setSharedDocExists(false);
@@ -621,7 +705,8 @@ export default function App() {
     if (
       Object.keys(outputState).length === 0 &&
       Object.keys(eventOwnerState).length === 0 &&
-      Object.keys(taskOwnerState).length === 0
+      Object.keys(taskOwnerState).length === 0 &&
+      Object.keys(taskTextState).length === 0
     ) {
       return;
     }
@@ -631,6 +716,7 @@ export default function App() {
         outputState,
         eventOwnerState,
         taskOwnerState,
+        taskTextState,
       },
       currentUser.email,
     )
@@ -640,7 +726,16 @@ export default function App() {
       .catch((error) => {
         setSyncError(error?.message || "Could not seed cloud state.");
       });
-  }, [canEdit, currentUser, eventOwnerState, firebaseEnabled, outputState, sharedDocExists, taskOwnerState]);
+  }, [
+    canEdit,
+    currentUser,
+    eventOwnerState,
+    firebaseEnabled,
+    outputState,
+    sharedDocExists,
+    taskOwnerState,
+    taskTextState,
+  ]);
 
   function focusEvent(eventId, eventDate) {
     setSelectedMonth(monthKey(eventDate));
@@ -682,6 +777,7 @@ export default function App() {
     nextOutputState,
     nextEventOwnerState,
     nextTaskOwnerState,
+    nextTaskTextState,
     overrideEditorEmail,
   ) {
     if (!firebaseEnabled) {
@@ -693,6 +789,7 @@ export default function App() {
         outputState: nextOutputState,
         eventOwnerState: nextEventOwnerState,
         taskOwnerState: nextTaskOwnerState,
+        taskTextState: nextTaskTextState,
       },
       overrideEditorEmail ?? currentUser?.email ?? PRIMARY_EDITOR_EMAIL,
     );
@@ -724,6 +821,7 @@ export default function App() {
         nextState,
         eventOwnerState,
         taskOwnerState,
+        taskTextState,
         overrideEditorEmail,
       );
     } catch (error) {
@@ -753,9 +851,10 @@ export default function App() {
 
     setEventOwnerState(nextState);
     setAuthError("");
+    setOwnerPickerOpen(false);
 
     try {
-      await persistSharedState(outputState, nextState, taskOwnerState);
+      await persistSharedState(outputState, nextState, taskOwnerState, taskTextState);
     } catch (error) {
       setEventOwnerState(previousState);
       setSyncError(error?.message || "Could not save event owner.");
@@ -785,11 +884,52 @@ export default function App() {
     setAuthError("");
 
     try {
-      await persistSharedState(outputState, eventOwnerState, nextState);
+      await persistSharedState(outputState, eventOwnerState, nextState, taskTextState);
     } catch (error) {
       setTaskOwnerState(previousState);
       setSyncError(error?.message || "Could not save task owner.");
     }
+  }
+
+  async function updateTaskText(eventId, milestoneType, outputId, nextText) {
+    if (!canEdit) {
+      if (firebaseEnabled) {
+        openAuthModal();
+      }
+      return;
+    }
+
+    const stateKey = taskTextStateKey(eventId, milestoneType, outputId);
+    const previousState = taskTextState;
+    const nextState = { ...taskTextState };
+    const normalizedText = nextText;
+
+    if (normalizedText.trim()) {
+      nextState[stateKey] = normalizedText;
+    } else {
+      delete nextState[stateKey];
+    }
+
+    setTaskTextState(nextState);
+    setAuthError("");
+
+    try {
+      await persistSharedState(outputState, eventOwnerState, taskOwnerState, nextState);
+    } catch (error) {
+      setTaskTextState(previousState);
+      setSyncError(error?.message || "Could not save volunteer name.");
+    }
+  }
+
+  function toggleOwnerPicker() {
+    if (!canEdit) {
+      if (firebaseEnabled) {
+        openAuthModal();
+      }
+      return;
+    }
+
+    setOwnerPickerOpen((current) => !current);
   }
 
   async function handleSignInWithGoogle() {
@@ -1082,26 +1222,40 @@ export default function App() {
                       individually.
                     </p>
                   </div>
-                  <div className="detail-owner-controls">
-                    <label className="owner-field">
-                      <span className="owner-field-label">Lead</span>
-                      <select
-                        className="owner-select"
-                        value={selectedEvent.owner}
-                        onChange={(event) => updateEventOwner(selectedEvent.id, event.target.value)}
-                        disabled={!canEdit}
-                      >
-                        <option value="">Unassigned</option>
+                  <div className="detail-owner-controls" ref={ownerPickerRef}>
+                    <button
+                      type="button"
+                      className={`owner-tag owner-picker-trigger owner-${ownerTone(selectedEvent.owner)}`}
+                      onClick={toggleOwnerPicker}
+                      aria-haspopup="menu"
+                      aria-expanded={ownerPickerOpen}
+                    >
+                      <span>{displayOwnerLabel(selectedEvent.owner)}</span>
+                      <span className="owner-picker-chevron" aria-hidden="true">
+                        {ownerPickerOpen ? "^" : "v"}
+                      </span>
+                    </button>
+                    {ownerPickerOpen && canEdit && (
+                      <div className="owner-picker-menu" role="menu" aria-label="Choose event owner">
+                        <button
+                          type="button"
+                          className="owner-picker-option"
+                          onClick={() => updateEventOwner(selectedEvent.id, "")}
+                        >
+                          Unassigned
+                        </button>
                         {OWNER_OPTIONS.map((owner) => (
-                          <option key={owner} value={owner}>
+                          <button
+                            key={owner}
+                            type="button"
+                            className={`owner-picker-option ${selectedEvent.owner === owner ? "active" : ""}`}
+                            onClick={() => updateEventOwner(selectedEvent.id, owner)}
+                          >
                             {owner}
-                          </option>
+                          </button>
                         ))}
-                      </select>
-                    </label>
-                    <span className={`owner-tag owner-${ownerTone(selectedEvent.owner)}`}>
-                      {displayOwnerLabel(selectedEvent.owner)}
-                    </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1210,11 +1364,12 @@ export default function App() {
                                     }
                                     disabled={!canEdit}
                                   >
-                                    <option value="">
-                                      Event owner default ({displayOwnerLabel(selectedEvent.owner)})
-                                    </option>
-                                    {OWNER_OPTIONS.map((owner) => (
-                                      <option key={owner} value={owner}>
+                                    <option value="">{displayOwnerLabel(selectedEvent.owner)}</option>
+                                    {OWNER_OPTIONS.filter((owner) => owner !== selectedEvent.owner).map((owner) => (
+                                      <option
+                                        key={owner}
+                                        value={owner}
+                                      >
                                         {owner}
                                       </option>
                                     ))}
@@ -1222,6 +1377,26 @@ export default function App() {
                                   <span className={`owner-tag owner-${ownerTone(output.owner)}`}>
                                     {displayOwnerLabel(output.owner)}
                                   </span>
+                                  {output.id === "filmVolunteerConfirmed" && (
+                                    <label className="task-text-field">
+                                      <span className="output-owner-label">Confirmed name</span>
+                                      <input
+                                        type="text"
+                                        className="task-detail-input"
+                                        value={output.textValue}
+                                        onChange={(event) =>
+                                          updateTaskText(
+                                            selectedEvent.id,
+                                            milestone.type,
+                                            output.id,
+                                            event.target.value,
+                                          )
+                                        }
+                                        placeholder="Volunteer name"
+                                        disabled={!canEdit}
+                                      />
+                                    </label>
+                                  )}
                                 </div>
                               </div>
                             ))}
@@ -1297,8 +1472,8 @@ export default function App() {
               </button>
             </div>
             <p className="auth-modal-copy">
-              Event owners, task owners, and checklist state stay visible for everyone, but only
-              the approved Google account can change them.
+              Event owners, task owners, confirmed names, and checklist state stay visible for
+              everyone, but only the approved Google account can change them.
             </p>
             {PRIMARY_EDITOR_EMAIL && (
               <p className="auth-modal-copy">

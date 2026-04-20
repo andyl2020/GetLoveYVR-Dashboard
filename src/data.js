@@ -1,6 +1,6 @@
 export const TODAY = "2026-04-07";
 
-export const OWNER_OPTIONS = ["Andy", "Sandy", "Patrice", "Stephanie"];
+export const OWNER_OPTIONS = ["Andy", "Sandy", "Patrice", "Stephy"];
 
 export const MILESTONE_PLAYBOOK = {
   alignment: {
