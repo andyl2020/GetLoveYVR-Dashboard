@@ -835,8 +835,11 @@ button {
   align-items: center;
 }
 
-.detail-owner-controls {
+.owner-picker-shell {
   position: relative;
+}
+
+.detail-owner-controls {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
@@ -853,8 +856,7 @@ button {
   text-transform: uppercase;
 }
 
-.owner-picker-trigger,
-.task-owner-select {
+.owner-picker-trigger {
   transition:
     border-color 160ms ease,
     background 160ms ease,
@@ -875,7 +877,6 @@ button {
 }
 
 .owner-picker-trigger:focus-visible,
-.task-owner-select:focus,
 .task-detail-input:focus {
   border-color: rgba(117, 221, 255, 0.34);
   box-shadow: 0 0 0 4px rgba(117, 221, 255, 0.12);
@@ -927,7 +928,6 @@ button {
   background: rgba(117, 221, 255, 0.1);
 }
 
-.task-owner-select,
 .task-detail-input {
   min-width: 12rem;
   padding: 0.78rem 0.9rem;
@@ -935,11 +935,6 @@ button {
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.04);
   color: var(--text);
-}
-
-.task-owner-select:disabled {
-  opacity: 0.78;
-  cursor: not-allowed;
 }
 
 .readonly-banner {
@@ -1205,8 +1200,9 @@ button {
   align-items: flex-end;
 }
 
-.task-owner-select {
+.task-owner-trigger {
   min-width: 15rem;
+  justify-content: space-between;
 }
 
 .task-text-field {
@@ -1229,7 +1225,6 @@ button {
 }
 
 .output-item.locked input,
-.output-item.locked select,
 .output-item.locked .task-detail-input,
 .output-item.locked .owner-picker-trigger {
   cursor: not-allowed;
@@ -1381,7 +1376,7 @@ button {
     justify-content: flex-start;
   }
 
-  .task-owner-select,
+  .task-owner-trigger,
   .task-detail-input,
   .owner-picker-menu {
     min-width: 0;

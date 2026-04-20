@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CONTENT_TYPE_GUIDE,
   EVENTS,
@@ -533,9 +533,8 @@ export default function App() {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [pendingToggle, setPendingToggle] = useState(null);
-  const [ownerPickerOpen, setOwnerPickerOpen] = useState(false);
+  const [openOwnerPickerKey, setOpenOwnerPickerKey] = useState(null);
   const [filters, setFilters] = useState(() => createDefaultFilters());
-  const ownerPickerRef = useRef(null);
   const editorEmail = currentUser?.email?.trim().toLowerCase() ?? "";
   const canEdit = firebaseEnabled ? canEditEmail(editorEmail) : true;
 
@@ -639,23 +638,23 @@ export default function App() {
   }, [taskTextState]);
 
   useEffect(() => {
-    setOwnerPickerOpen(false);
+    setOpenOwnerPickerKey(null);
   }, [selectedEventId]);
 
   useEffect(() => {
-    if (!ownerPickerOpen || typeof document === "undefined") {
+    if (!openOwnerPickerKey || typeof document === "undefined") {
       return undefined;
     }
 
     function handlePointerDown(event) {
-      if (!ownerPickerRef.current?.contains(event.target)) {
-        setOwnerPickerOpen(false);
+      if (!(event.target instanceof Element) || !event.target.closest(".owner-picker-shell")) {
+        setOpenOwnerPickerKey(null);
       }
     }
 
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [ownerPickerOpen]);
+  }, [openOwnerPickerKey]);
 
   useEffect(() => {
     if (!firebaseEnabled) {
@@ -851,7 +850,7 @@ export default function App() {
 
     setEventOwnerState(nextState);
     setAuthError("");
-    setOwnerPickerOpen(false);
+    setOpenOwnerPickerKey(null);
 
     try {
       await persistSharedState(outputState, nextState, taskOwnerState, taskTextState);
@@ -882,6 +881,7 @@ export default function App() {
 
     setTaskOwnerState(nextState);
     setAuthError("");
+    setOpenOwnerPickerKey(null);
 
     try {
       await persistSharedState(outputState, eventOwnerState, nextState, taskTextState);
@@ -921,7 +921,7 @@ export default function App() {
     }
   }
 
-  function toggleOwnerPicker() {
+  function toggleOwnerPicker(pickerKey) {
     if (!canEdit) {
       if (firebaseEnabled) {
         openAuthModal();
@@ -929,7 +929,7 @@ export default function App() {
       return;
     }
 
-    setOwnerPickerOpen((current) => !current);
+    setOpenOwnerPickerKey((current) => (current === pickerKey ? null : pickerKey));
   }
 
   async function handleSignInWithGoogle() {
@@ -1222,20 +1222,20 @@ export default function App() {
                       individually.
                     </p>
                   </div>
-                  <div className="detail-owner-controls" ref={ownerPickerRef}>
+                  <div className="detail-owner-controls owner-picker-shell">
                     <button
                       type="button"
                       className={`owner-tag owner-picker-trigger owner-${ownerTone(selectedEvent.owner)}`}
-                      onClick={toggleOwnerPicker}
+                      onClick={() => toggleOwnerPicker("event")}
                       aria-haspopup="menu"
-                      aria-expanded={ownerPickerOpen}
+                      aria-expanded={openOwnerPickerKey === "event"}
                     >
                       <span>{displayOwnerLabel(selectedEvent.owner)}</span>
                       <span className="owner-picker-chevron" aria-hidden="true">
-                        {ownerPickerOpen ? "^" : "v"}
+                        {openOwnerPickerKey === "event" ? "^" : "v"}
                       </span>
                     </button>
-                    {ownerPickerOpen && canEdit && (
+                    {openOwnerPickerKey === "event" && canEdit && (
                       <div className="owner-picker-menu" role="menu" aria-label="Choose event owner">
                         <button
                           type="button"
@@ -1349,34 +1349,55 @@ export default function App() {
                                   />
                                   <span>{output.label}</span>
                                 </label>
-                                <div className="output-owner-panel">
+                                <div className="output-owner-panel owner-picker-shell">
                                   <span className="output-owner-label">Task owner</span>
-                                  <select
-                                    className="task-owner-select"
-                                    value={output.assignedOwner}
-                                    onChange={(event) =>
-                                      updateTaskOwner(
-                                        selectedEvent.id,
-                                        milestone.type,
-                                        output.id,
-                                        event.target.value,
-                                      )
-                                    }
-                                    disabled={!canEdit}
+                                  <button
+                                    type="button"
+                                    className={`owner-tag owner-picker-trigger task-owner-trigger owner-${ownerTone(output.owner)}`}
+                                    onClick={() => toggleOwnerPicker(output.ownerStateKey)}
+                                    aria-haspopup="menu"
+                                    aria-expanded={openOwnerPickerKey === output.ownerStateKey}
                                   >
-                                    <option value="">{displayOwnerLabel(selectedEvent.owner)}</option>
-                                    {OWNER_OPTIONS.filter((owner) => owner !== selectedEvent.owner).map((owner) => (
-                                      <option
-                                        key={owner}
-                                        value={owner}
+                                    <span>{displayOwnerLabel(output.owner)}</span>
+                                    <span className="owner-picker-chevron" aria-hidden="true">
+                                      {openOwnerPickerKey === output.ownerStateKey ? "^" : "v"}
+                                    </span>
+                                  </button>
+                                  {openOwnerPickerKey === output.ownerStateKey && canEdit && (
+                                    <div className="owner-picker-menu" role="menu" aria-label="Choose task owner">
+                                      <button
+                                        type="button"
+                                        className={`owner-picker-option ${!output.assignedOwner ? "active" : ""}`}
+                                        onClick={() =>
+                                          updateTaskOwner(
+                                            selectedEvent.id,
+                                            milestone.type,
+                                            output.id,
+                                            "",
+                                          )
+                                        }
                                       >
+                                        {displayOwnerLabel(selectedEvent.owner)}
+                                      </button>
+                                      {OWNER_OPTIONS.filter((owner) => owner !== selectedEvent.owner).map((owner) => (
+                                        <button
+                                          key={owner}
+                                          type="button"
+                                          className={`owner-picker-option ${output.assignedOwner === owner ? "active" : ""}`}
+                                          onClick={() =>
+                                            updateTaskOwner(
+                                              selectedEvent.id,
+                                              milestone.type,
+                                              output.id,
+                                              owner,
+                                            )
+                                          }
+                                        >
                                         {owner}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <span className={`owner-tag owner-${ownerTone(output.owner)}`}>
-                                    {displayOwnerLabel(output.owner)}
-                                  </span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
                                   {output.id === "filmVolunteerConfirmed" && (
                                     <label className="task-text-field">
                                       <span className="output-owner-label">Confirmed name</span>
