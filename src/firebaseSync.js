@@ -100,7 +100,7 @@ export function subscribeToSharedState(onState, onError) {
   );
 }
 
-export async function saveSharedState(outputState, editorEmail) {
+export async function saveSharedState(sharedState, editorEmail) {
   if (!sharedStateRef) {
     throw new Error("Firebase is not configured yet.");
   }
@@ -108,7 +108,7 @@ export async function saveSharedState(outputState, editorEmail) {
   await setDoc(
     sharedStateRef,
     {
-      outputState,
+      ...sharedState,
       updatedAt: serverTimestamp(),
       updatedBy: normalizeEmail(editorEmail),
     },

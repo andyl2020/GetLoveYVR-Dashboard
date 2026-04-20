@@ -495,6 +495,11 @@ button {
   border-color: rgba(140, 243, 204, 0.22);
 }
 
+.filter-chip-amber {
+  color: rgba(255, 200, 111, 0.94);
+  border-color: rgba(255, 200, 111, 0.22);
+}
+
 .filter-chip-critical {
   color: rgba(255, 124, 135, 0.94);
   border-color: rgba(255, 124, 135, 0.22);
@@ -513,6 +518,11 @@ button {
 .filter-chip-mint.active {
   background: linear-gradient(180deg, rgba(140, 243, 204, 0.18), rgba(140, 243, 204, 0.08));
   border-color: rgba(140, 243, 204, 0.34);
+}
+
+.filter-chip-amber.active {
+  background: linear-gradient(180deg, rgba(255, 200, 111, 0.18), rgba(255, 200, 111, 0.08));
+  border-color: rgba(255, 200, 111, 0.34);
 }
 
 .filter-chip-critical.active {
@@ -818,6 +828,78 @@ button {
   margin-bottom: 1rem;
 }
 
+.detail-owner-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+}
+
+.detail-owner-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.owner-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+  min-width: min(100%, 14rem);
+}
+
+.owner-field-label,
+.output-owner-label {
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.owner-select,
+.task-owner-select {
+  min-width: 12rem;
+  padding: 0.78rem 0.9rem;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.owner-select:focus,
+.task-owner-select:focus {
+  border-color: rgba(117, 221, 255, 0.34);
+  box-shadow: 0 0 0 4px rgba(117, 221, 255, 0.12);
+}
+
+.owner-select:disabled,
+.task-owner-select:disabled {
+  opacity: 0.78;
+  cursor: not-allowed;
+}
+
+.readonly-banner {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.85rem 0.95rem;
+  margin-bottom: 1rem;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-soft);
+}
+
 .detail-section + .detail-section {
   margin-top: 1rem;
 }
@@ -1011,9 +1093,9 @@ button {
 
 .output-item {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.65rem;
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.85rem;
+  align-items: center;
   padding: 0.72rem 0.8rem;
   border-radius: 16px;
   border: 1px solid var(--border);
@@ -1030,6 +1112,13 @@ button {
   transform: translateY(-1px);
 }
 
+.output-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: start;
+}
+
 .output-item input {
   width: 1rem;
   height: 1rem;
@@ -1037,7 +1126,7 @@ button {
   accent-color: #8cf3cc;
 }
 
-.output-item span {
+.output-main span {
   color: var(--text-soft);
   font-size: 0.9rem;
 }
@@ -1047,10 +1136,21 @@ button {
   background: rgba(154, 240, 162, 0.08);
 }
 
-.output-item.done span {
+.output-item.done .output-main span {
   color: var(--text);
   text-decoration: line-through;
   text-decoration-color: rgba(154, 240, 162, 0.38);
+}
+
+.output-owner-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+  align-items: flex-end;
+}
+
+.task-owner-select {
+  min-width: 15rem;
 }
 
 .output-item.locked {
@@ -1061,7 +1161,8 @@ button {
   transform: none;
 }
 
-.output-item.locked input {
+.output-item.locked input,
+.output-item.locked select {
   cursor: not-allowed;
 }
 
@@ -1098,6 +1199,11 @@ button {
 .owner-mint {
   color: var(--mint);
   border-color: rgba(140, 243, 204, 0.24);
+}
+
+.owner-amber {
+  color: var(--amber);
+  border-color: rgba(255, 200, 111, 0.24);
 }
 
 .owner-slate {
@@ -1190,6 +1296,29 @@ button {
     flex-direction: column;
   }
 
+  .detail-owner-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .output-item {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .detail-owner-controls,
+  .output-owner-panel {
+    align-items: stretch;
+    justify-content: flex-start;
+  }
+
+  .owner-select,
+  .task-owner-select,
+  .owner-field {
+    min-width: 0;
+    width: 100%;
+  }
+
   .content-guide {
     width: 100%;
   }
@@ -1215,5 +1344,10 @@ button {
 
   .page-header h1 {
     font-size: 1.9rem;
+  }
+
+  .readonly-banner {
+    flex-direction: column;
+    align-items: stretch;
   }
 }

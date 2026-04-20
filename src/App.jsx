@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import { CONTENT_TYPE_GUIDE, EVENTS, MILESTONE_PLAYBOOK, VACATION_BLOCKS } from "./data";
+import {
+  CONTENT_TYPE_GUIDE,
+  EVENTS,
+  MILESTONE_PLAYBOOK,
+  OWNER_OPTIONS,
+  VACATION_BLOCKS,
+} from "./data";
 import {
   canEditEmail,
   getEditorEmails,
@@ -12,21 +18,30 @@ import {
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const OUTPUT_STORAGE_KEY = "getloveyvr-output-progress-v1";
+const EVENT_OWNER_STORAGE_KEY = "getloveyvr-event-owners-v1";
+const TASK_OWNER_STORAGE_KEY = "getloveyvr-task-owners-v1";
 const PRIMARY_EDITOR_EMAIL = getEditorEmails()[0] ?? "";
-
-const FILTER_OPTIONS = [
-  { id: "sandy", label: "Sandy events", tone: "rose" },
-  { id: "patrice", label: "Patrice events", tone: "cyan" },
-  { id: "vacations", label: "Vacations", tone: "mint" },
-  { id: "issuesOnly", label: "Only issues", tone: "critical" },
-];
 
 const OWNER_TONES = {
   Sandy: "rose",
   Patrice: "cyan",
   Andy: "mint",
-  TBD: "slate",
+  Stephanie: "amber",
 };
+
+function ownerFilterId(owner) {
+  return `owner_${owner.toLowerCase()}`;
+}
+
+const FILTER_OPTIONS = [
+  ...OWNER_OPTIONS.map((owner) => ({
+    id: ownerFilterId(owner),
+    label: `${owner} events`,
+    tone: OWNER_TONES[owner] ?? "slate",
+  })),
+  { id: "vacations", label: "Vacations", tone: "mint" },
+  { id: "issuesOnly", label: "Only issues", tone: "critical" },
+];
 
 const STATUS_META = {
   done: { label: "Done", tone: "positive" },
@@ -150,6 +165,18 @@ function buildMonthOptions(events, todayKey) {
   return [...new Set([monthKey(todayKey), ...events.map((event) => monthKey(event.eventDate))])].sort();
 }
 
+function normalizeAssignee(value) {
+  return OWNER_OPTIONS.includes(value) ? value : "";
+}
+
+function displayOwnerLabel(value) {
+  return normalizeAssignee(value) || "Unassigned";
+}
+
+function ownerTone(value) {
+  return OWNER_TONES[normalizeAssignee(value)] ?? "slate";
+}
+
 function normalizeStoredOutputState(rawState) {
   if (!rawState || typeof rawState !== "object") {
     return {};
@@ -157,6 +184,18 @@ function normalizeStoredOutputState(rawState) {
 
   return Object.fromEntries(
     Object.entries(rawState).map(([key, value]) => [key.replace(/:/g, "__"), Boolean(value)]),
+  );
+}
+
+function normalizeStoredAssignmentState(rawState) {
+  if (!rawState || typeof rawState !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(rawState)
+      .map(([key, value]) => [key.replace(/:/g, "__"), normalizeAssignee(value)])
+      .filter(([, value]) => Boolean(value)),
   );
 }
 
@@ -178,8 +217,50 @@ function readOutputState() {
   }
 }
 
+function readAssignmentState(storageKey) {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const stored = window.localStorage.getItem(storageKey);
+    if (!stored) {
+      return {};
+    }
+
+    const parsed = JSON.parse(stored);
+    return normalizeStoredAssignmentState(parsed);
+  } catch {
+    return {};
+  }
+}
+
 function outputStateKey(eventId, milestoneType, outputId) {
   return `${eventId}__${milestoneType}__${outputId}`;
+}
+
+function eventOwnerStateKey(eventId) {
+  return `event__${eventId}`;
+}
+
+function taskOwnerStateKey(eventId, milestoneType, outputId) {
+  return `${eventId}__${milestoneType}__${outputId}`;
+}
+
+function resolveEventOwner(event, eventOwnerState) {
+  return normalizeAssignee(eventOwnerState[eventOwnerStateKey(event.id)]) || normalizeAssignee(event.owner);
+}
+
+function resolveTaskOwner(taskOwnerState, eventId, milestoneType, outputId, eventOwner) {
+  return (
+    normalizeAssignee(taskOwnerState[taskOwnerStateKey(eventId, milestoneType, outputId)]) || eventOwner
+  );
+}
+
+function createDefaultFilters() {
+  return Object.fromEntries(
+    [...OWNER_OPTIONS.map((owner) => [ownerFilterId(owner), true]), ["vacations", true], ["issuesOnly", false]],
+  );
 }
 
 function milestoneStatus(dateString, done, todayKey) {
@@ -245,17 +326,23 @@ function clipVacationBlockToMonth(block, selectedMonth) {
   };
 }
 
-function resolveMilestones(event, outputState) {
+function resolveMilestones(event, outputState, taskOwnerState, eventOwner) {
   return event.milestones.map((milestone) => {
     const template = MILESTONE_PLAYBOOK[milestone.type];
     const outputs = milestone.outputs.map((output) => {
       const stateKey = outputStateKey(event.id, milestone.type, output.id);
       const done = outputState[stateKey] ?? output.done;
+      const ownerStateKey = taskOwnerStateKey(event.id, milestone.type, output.id);
+      const assignedOwner = normalizeAssignee(taskOwnerState[ownerStateKey]);
+      const owner = resolveTaskOwner(taskOwnerState, event.id, milestone.type, output.id, eventOwner);
 
       return {
         ...output,
         done,
         stateKey,
+        ownerStateKey,
+        assignedOwner,
+        owner,
       };
     });
 
@@ -272,13 +359,14 @@ function resolveMilestones(event, outputState) {
   });
 }
 
-function buildEventModels(events, vacationLookup, outputState, todayKey) {
+function buildEventModels(events, vacationLookup, outputState, eventOwnerState, taskOwnerState, todayKey) {
   return [...events]
     .sort((left, right) => left.eventDate.localeCompare(right.eventDate))
     .map((event) => {
-      const milestones = resolveMilestones(event, outputState);
+      const owner = resolveEventOwner(event, eventOwnerState);
+      const milestones = resolveMilestones(event, outputState, taskOwnerState, owner);
       const issues = [];
-      const ownerVacationDays = vacationLookup[event.owner] ?? new Set();
+      const ownerVacationDays = owner ? vacationLookup[owner] ?? new Set() : new Set();
       const overdueMilestones = milestones.filter(
         (milestone) =>
           !milestone.done && milestoneStatus(milestone.date, milestone.done, todayKey) === "overdue",
@@ -306,8 +394,8 @@ function buildEventModels(events, vacationLookup, outputState, todayKey) {
           label: "Owner conflict",
           message:
             vacationConflicts.length === 1
-              ? `${event.owner} is away when ${vacationConflicts[0].label} is due.`
-              : `${event.owner} is away during ${vacationConflicts.length} milestones.`,
+              ? `${owner} is away when ${vacationConflicts[0].label} is due.`
+              : `${owner} is away during ${vacationConflicts.length} milestones.`,
         });
       }
 
@@ -337,6 +425,7 @@ function buildEventModels(events, vacationLookup, outputState, todayKey) {
 
       return {
         ...event,
+        owner,
         milestones,
         code: eventCode(event),
         displayName: eventDisplayName(event),
@@ -378,6 +467,12 @@ export default function App() {
   const [selectedMonth, setSelectedMonth] = useState(() => monthKey(getTodayKey()));
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [outputState, setOutputState] = useState(() => readOutputState());
+  const [eventOwnerState, setEventOwnerState] = useState(() =>
+    readAssignmentState(EVENT_OWNER_STORAGE_KEY),
+  );
+  const [taskOwnerState, setTaskOwnerState] = useState(() =>
+    readAssignmentState(TASK_OWNER_STORAGE_KEY),
+  );
   const [currentUser, setCurrentUser] = useState(null);
   const [authError, setAuthError] = useState("");
   const [syncError, setSyncError] = useState("");
@@ -385,23 +480,23 @@ export default function App() {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [pendingToggle, setPendingToggle] = useState(null);
-  const [filters, setFilters] = useState({
-    sandy: true,
-    patrice: true,
-    vacations: true,
-    issuesOnly: false,
-  });
+  const [filters, setFilters] = useState(() => createDefaultFilters());
   const editorEmail = currentUser?.email?.trim().toLowerCase() ?? "";
   const canEdit = firebaseEnabled ? canEditEmail(editorEmail) : true;
 
   const monthOptions = buildMonthOptions(EVENTS, todayKey);
   const vacationLookup = buildVacationLookup(VACATION_BLOCKS);
-  const eventModels = buildEventModels(EVENTS, vacationLookup, outputState, todayKey);
+  const eventModels = buildEventModels(
+    EVENTS,
+    vacationLookup,
+    outputState,
+    eventOwnerState,
+    taskOwnerState,
+    todayKey,
+  );
   const visibleEvents = eventModels.filter((event) => {
-    if (!filters.sandy && event.owner === "Sandy") {
-      return false;
-    }
-    if (!filters.patrice && event.owner === "Patrice") {
+    const activeOwnerFilter = event.owner ? filters[ownerFilterId(event.owner)] : true;
+    if (activeOwnerFilter === false) {
       return false;
     }
     if (filters.issuesOnly && event.issueCount === 0) {
@@ -414,9 +509,9 @@ export default function App() {
   const alerts = buildAlerts(visibleEvents);
   const criticalCount = alerts.filter((alert) => alert.severity === "critical").length;
   const warningCount = alerts.filter((alert) => alert.severity === "warning").length;
-  const availabilityRows = ["Sandy", "Patrice", "Andy"].map((owner) => ({
+  const availabilityRows = OWNER_OPTIONS.map((owner) => ({
     owner,
-    tone: OWNER_TONES[owner],
+    tone: ownerTone(owner),
     blocks: VACATION_BLOCKS
       .filter((block) => block.owner === owner)
       .map((block) => clipVacationBlockToMonth(block, selectedMonth))
@@ -464,6 +559,22 @@ export default function App() {
   }, [outputState]);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(EVENT_OWNER_STORAGE_KEY, JSON.stringify(eventOwnerState));
+  }, [eventOwnerState]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(TASK_OWNER_STORAGE_KEY, JSON.stringify(taskOwnerState));
+  }, [taskOwnerState]);
+
+  useEffect(() => {
     if (!firebaseEnabled) {
       return () => {};
     }
@@ -485,11 +596,13 @@ export default function App() {
 
     return subscribeToSharedState(
       (data) => {
-        if (data?.outputState && typeof data.outputState === "object") {
+        if (data) {
           setOutputState(normalizeStoredOutputState(data.outputState));
+          setEventOwnerState(normalizeStoredAssignmentState(data.eventOwnerState));
+          setTaskOwnerState(normalizeStoredAssignmentState(data.taskOwnerState));
           setSharedDocExists(true);
         } else {
-          setSharedDocExists(Boolean(data));
+          setSharedDocExists(false);
         }
 
         setSyncError("");
@@ -505,18 +618,29 @@ export default function App() {
       return;
     }
 
-    if (Object.keys(outputState).length === 0) {
+    if (
+      Object.keys(outputState).length === 0 &&
+      Object.keys(eventOwnerState).length === 0 &&
+      Object.keys(taskOwnerState).length === 0
+    ) {
       return;
     }
 
-    saveSharedState(outputState, currentUser.email)
+    saveSharedState(
+      {
+        outputState,
+        eventOwnerState,
+        taskOwnerState,
+      },
+      currentUser.email,
+    )
       .then(() => {
         setSharedDocExists(true);
       })
       .catch((error) => {
         setSyncError(error?.message || "Could not seed cloud state.");
       });
-  }, [canEdit, currentUser, firebaseEnabled, outputState, sharedDocExists]);
+  }, [canEdit, currentUser, eventOwnerState, firebaseEnabled, outputState, sharedDocExists, taskOwnerState]);
 
   function focusEvent(eventId, eventDate) {
     setSelectedMonth(monthKey(eventDate));
@@ -549,6 +673,33 @@ export default function App() {
     setAuthError("");
   }
 
+  function openAuthModal() {
+    setAuthModalOpen(true);
+    setAuthError("");
+  }
+
+  async function persistSharedState(
+    nextOutputState,
+    nextEventOwnerState,
+    nextTaskOwnerState,
+    overrideEditorEmail,
+  ) {
+    if (!firebaseEnabled) {
+      return;
+    }
+
+    await saveSharedState(
+      {
+        outputState: nextOutputState,
+        eventOwnerState: nextEventOwnerState,
+        taskOwnerState: nextTaskOwnerState,
+      },
+      overrideEditorEmail ?? currentUser?.email ?? PRIMARY_EDITOR_EMAIL,
+    );
+    setSharedDocExists(true);
+    setSyncError("");
+  }
+
   async function commitOutputToggle(eventId, milestoneType, outputId, overrideEditorEmail) {
     const stateKey = outputStateKey(eventId, milestoneType, outputId);
     const event = EVENTS.find((item) => item.id === eventId);
@@ -569,15 +720,75 @@ export default function App() {
     }
 
     try {
-      await saveSharedState(
+      await persistSharedState(
         nextState,
-        overrideEditorEmail ?? currentUser?.email ?? PRIMARY_EDITOR_EMAIL,
+        eventOwnerState,
+        taskOwnerState,
+        overrideEditorEmail,
       );
-      setSharedDocExists(true);
-      setSyncError("");
     } catch (error) {
       setOutputState(previousState);
       setSyncError(error?.message || "Could not save checklist changes.");
+    }
+  }
+
+  async function updateEventOwner(eventId, nextOwner) {
+    if (!canEdit) {
+      if (firebaseEnabled) {
+        openAuthModal();
+      }
+      return;
+    }
+
+    const stateKey = eventOwnerStateKey(eventId);
+    const previousState = eventOwnerState;
+    const normalizedOwner = normalizeAssignee(nextOwner);
+    const nextState = { ...eventOwnerState };
+
+    if (normalizedOwner) {
+      nextState[stateKey] = normalizedOwner;
+    } else {
+      delete nextState[stateKey];
+    }
+
+    setEventOwnerState(nextState);
+    setAuthError("");
+
+    try {
+      await persistSharedState(outputState, nextState, taskOwnerState);
+    } catch (error) {
+      setEventOwnerState(previousState);
+      setSyncError(error?.message || "Could not save event owner.");
+    }
+  }
+
+  async function updateTaskOwner(eventId, milestoneType, outputId, nextOwner) {
+    if (!canEdit) {
+      if (firebaseEnabled) {
+        openAuthModal();
+      }
+      return;
+    }
+
+    const stateKey = taskOwnerStateKey(eventId, milestoneType, outputId);
+    const previousState = taskOwnerState;
+    const normalizedOwner = normalizeAssignee(nextOwner);
+    const nextState = { ...taskOwnerState };
+
+    if (normalizedOwner) {
+      nextState[stateKey] = normalizedOwner;
+    } else {
+      delete nextState[stateKey];
+    }
+
+    setTaskOwnerState(nextState);
+    setAuthError("");
+
+    try {
+      await persistSharedState(outputState, eventOwnerState, nextState);
+    } catch (error) {
+      setTaskOwnerState(previousState);
+      setSyncError(error?.message || "Could not save task owner.");
     }
   }
 
@@ -619,8 +830,7 @@ export default function App() {
     if (!canEdit) {
       if (firebaseEnabled) {
         setPendingToggle({ eventId, milestoneType, outputId });
-        setAuthModalOpen(true);
-        setAuthError("");
+        openAuthModal();
         return;
       }
 
@@ -813,7 +1023,7 @@ export default function App() {
                           )}
                         </div>
                         <strong>{event.displayName}</strong>
-                        <small>{event.owner}</small>
+                        <small>{displayOwnerLabel(event.owner)}</small>
                       </button>
                     ))}
                     {dayEvents.length === 0 && <div className="calendar-empty" />}
@@ -861,39 +1071,51 @@ export default function App() {
                   <span className={`pill ${toneForEvent(selectedEvent)}`}>
                     {SEVERITY_META[selectedEvent.severity].label}
                   </span>
-                  <span className={`owner-tag owner-${OWNER_TONES[selectedEvent.owner] ?? "slate"}`}>
-                    {selectedEvent.owner}
-                  </span>
                   <span className="detail-date">{formatDayLabel(selectedEvent.eventDate)}</span>
                 </div>
 
-                <div className="detail-section">
-                  <h3>What this event is</h3>
-                  <p>
-                    {selectedEvent.displayName} is the {selectedEvent.theme} event scheduled for{" "}
-                    {formatShortDate(selectedEvent.eventDate)}.
-                  </p>
+                <div className="detail-section detail-owner-card">
+                  <div>
+                    <h3>Event owner</h3>
+                    <p>
+                      Set the event lead here. Task owners below can inherit this lead or be assigned
+                      individually.
+                    </p>
+                  </div>
+                  <div className="detail-owner-controls">
+                    <label className="owner-field">
+                      <span className="owner-field-label">Lead</span>
+                      <select
+                        className="owner-select"
+                        value={selectedEvent.owner}
+                        onChange={(event) => updateEventOwner(selectedEvent.id, event.target.value)}
+                        disabled={!canEdit}
+                      >
+                        <option value="">Unassigned</option>
+                        {OWNER_OPTIONS.map((owner) => (
+                          <option key={owner} value={owner}>
+                            {owner}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <span className={`owner-tag owner-${ownerTone(selectedEvent.owner)}`}>
+                      {displayOwnerLabel(selectedEvent.owner)}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="detail-section">
-                  <h3>Issues</h3>
-                  {selectedEvent.issues.length === 0 ? (
-                    <div className="empty-state">No active issues for this event.</div>
-                  ) : (
-                    <div className="issue-list">
-                      {selectedEvent.issues.map((issue) => (
-                        <div key={issue.label} className={`issue-card tone-${SEVERITY_META[issue.severity].tone}`}>
-                          <div className="issue-card-topline">
-                            <span className={`pill tone-${SEVERITY_META[issue.severity].tone}`}>
-                              {issue.label}
-                            </span>
-                          </div>
-                          <p>{issue.message}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                {firebaseEnabled && !canEdit && (
+                  <div className="readonly-banner">
+                    <span>
+                      Read-only for everyone except{" "}
+                      <strong>{PRIMARY_EDITOR_EMAIL || "the approved editor"}</strong>.
+                    </span>
+                    <button type="button" className="auth-button" onClick={openAuthModal}>
+                      Sign in to edit
+                    </button>
+                  </div>
+                )}
 
                 <div className="detail-section">
                   <div className="detail-section-header">
@@ -916,13 +1138,13 @@ export default function App() {
                   <p className="milestone-section-note">
                     Each milestone has a definition, timing rule, and required outputs.
                     A step only turns done when every output below is checked off.
-                    Use the content key for the A / B / C / D1 / D2 labels.
+                    Task owners can inherit the event lead or be assigned one by one.
                   </p>
                   <div className="milestone-list">
                     {selectedEvent.milestones.map((milestone) => {
                       const status = milestoneStatus(milestone.date, milestone.done, todayKey);
                       const conflict =
-                        selectedEvent.owner !== "TBD" &&
+                        Boolean(selectedEvent.owner) &&
                         vacationLookup[selectedEvent.owner]?.has(milestone.date);
 
                       return (
@@ -953,24 +1175,55 @@ export default function App() {
                           </div>
                           <div className="output-list">
                             {milestone.outputs.map((output) => (
-                              <label
+                              <div
                                 key={output.id}
                                 className={[
                                   "output-item",
                                   output.done ? "done" : "",
+                                  !canEdit ? "locked" : "",
                                 ]
                                   .filter(Boolean)
                                   .join(" ")}
                               >
-                                <input
-                                  type="checkbox"
-                                  checked={output.done}
-                                  onChange={() =>
-                                    toggleOutput(selectedEvent.id, milestone.type, output.id)
-                                  }
-                                />
-                                <span>{output.label}</span>
-                              </label>
+                                <label className="output-main">
+                                  <input
+                                    type="checkbox"
+                                    checked={output.done}
+                                    onChange={() =>
+                                      toggleOutput(selectedEvent.id, milestone.type, output.id)
+                                    }
+                                  />
+                                  <span>{output.label}</span>
+                                </label>
+                                <div className="output-owner-panel">
+                                  <span className="output-owner-label">Task owner</span>
+                                  <select
+                                    className="task-owner-select"
+                                    value={output.assignedOwner}
+                                    onChange={(event) =>
+                                      updateTaskOwner(
+                                        selectedEvent.id,
+                                        milestone.type,
+                                        output.id,
+                                        event.target.value,
+                                      )
+                                    }
+                                    disabled={!canEdit}
+                                  >
+                                    <option value="">
+                                      Event owner default ({displayOwnerLabel(selectedEvent.owner)})
+                                    </option>
+                                    {OWNER_OPTIONS.map((owner) => (
+                                      <option key={owner} value={owner}>
+                                        {owner}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <span className={`owner-tag owner-${ownerTone(output.owner)}`}>
+                                    {displayOwnerLabel(output.owner)}
+                                  </span>
+                                </div>
+                              </div>
                             ))}
                           </div>
                         </div>
@@ -1008,8 +1261,8 @@ export default function App() {
                   <strong>{directoryEventName(event)}</strong>
                   <div className="directory-item-meta">
                     <span className="meta-chip">{formatShortDate(event.eventDate)}</span>
-                    <span className={`meta-chip owner-chip owner-${OWNER_TONES[event.owner] ?? "slate"}`}>
-                      {event.owner}
+                    <span className={`meta-chip owner-chip owner-${ownerTone(event.owner)}`}>
+                      {displayOwnerLabel(event.owner)}
                     </span>
                   </div>
                 </button>
@@ -1031,7 +1284,7 @@ export default function App() {
             <div className="auth-modal-header">
               <div>
                 <div className="eyebrow">Editor sign-in</div>
-                <h2 id="auth-modal-title">Sign in to change task status</h2>
+                <h2 id="auth-modal-title">Sign in to edit the dashboard</h2>
               </div>
               <button
                 type="button"
@@ -1044,8 +1297,8 @@ export default function App() {
               </button>
             </div>
             <p className="auth-modal-copy">
-              Tick boxes stay visible for everyone, but only the approved Google account can
-              check or uncheck them.
+              Event owners, task owners, and checklist state stay visible for everyone, but only
+              the approved Google account can change them.
             </p>
             {PRIMARY_EDITOR_EMAIL && (
               <p className="auth-modal-copy">

@@ -1,14 +1,19 @@
 export const TODAY = "2026-04-07";
 
+export const OWNER_OPTIONS = ["Andy", "Sandy", "Patrice", "Stephanie"];
+
 export const MILESTONE_PLAYBOOK = {
   alignment: {
     label: "Event Alignment",
     timing: "5 weeks before",
     summary:
-      "Agree on the event direction at a high level so the team is aligned on what this event is.",
+      "Agree on the event direction at a high level and make sure event ownership is clearly assigned.",
     outputs: [
       { id: "direction", label: "High-level event concept is agreed" },
-      { id: "positioning", label: "Event positioning or talking points are written down" },
+      {
+        id: "leadAssigned",
+        label: "Event lead is identified and ownership has been discussed and assigned",
+      },
     ],
   },
   venueLocked: {
@@ -26,11 +31,9 @@ export const MILESTONE_PLAYBOOK = {
     label: "Kickoff",
     timing: "3 weeks before",
     summary:
-      "Kick off the event with the public-facing assets and the core reel concepts fully defined.",
+      "Kick off the event with the public-facing launch assets live and production support in place.",
     outputs: [
-      { id: "eventGraphicPosted", label: "(A) Event Graphic posted" },
-      { id: "eventAnnouncementScripted", label: "(B) Event Announcement Reel scripted" },
-      { id: "unhingedBrandScripted", label: "(C) Unhinged Brand Reel scripted" },
+      { id: "eventGraphicPosted", label: "(A) Event graphic + event post has been published" },
       { id: "filmVolunteerIdentified", label: "(D1) Film Volunteer identified" },
     ],
   },
@@ -38,22 +41,26 @@ export const MILESTONE_PLAYBOOK = {
     label: "Content Production",
     timing: "2 weeks before",
     summary:
-      "Get the key reels captured or sourced so launch-week scheduling is not blocked by missing content.",
+      "Get the main conversion reel and the personality-driven brand reel filmed so the final push is not blocked.",
     outputs: [
-      { id: "eventAnnouncementFilmed", label: "(B) Event Announcement Reel filmed" },
-      { id: "unhingedBrandFilmed", label: "(C) Unhinged Brand Reel filmed or sourced" },
+      {
+        id: "contentBCFilmed",
+        label: "Content B & C filmed (Event Announcement Reel + Unhinged Brand Reel)",
+      },
     ],
   },
   finalCheck: {
     label: "Final Check",
     timing: "6 days before",
     summary:
-      "Confirm the content is queued and the final event check-in has happened before the last push week.",
+      "Confirm the launch content is scheduled or posted and the event lead has run the final agenda rundown.",
     outputs: [
-      { id: "eventAnnouncementScheduled", label: "(B) Event Announcement Reel scheduled" },
-      { id: "unhingedBrandScheduled", label: "(C) Unhinged Brand Reel scheduled" },
+      {
+        id: "contentBCScheduledOrPosted",
+        label: "Content B & C scheduled / posted (Event Announcement Reel + Unhinged Brand Reel)",
+      },
       { id: "filmVolunteerConfirmed", label: "(D1) Film Volunteer confirmed" },
-      { id: "teamCheckinDone", label: "Sandy / Patrice check-in done" },
+      { id: "agendaRundownDone", label: "Event lead hosts agenda rundown (call conducted)" },
     ],
   },
   eventDay: {
@@ -143,9 +150,9 @@ function createEvent({
 export const CONTENT_TYPE_GUIDE = [
   {
     code: "A",
-    title: "Event Graphic",
+    title: "Event Graphic + Event Post",
     description:
-      "The visual announcement for the event. Gives people the key details like date, vibe, and ticket link in one post.",
+      "The visual announcement and matching event post that publish the key details like date, vibe, and ticket link.",
   },
   {
     code: "B",
@@ -202,53 +209,50 @@ export const EVENTS = [
   createEvent({
     id: 3,
     seriesNumber: "3/8",
-    theme: "Baking",
-    owner: "Patrice",
-    eventDate: "2026-05-10",
-    tentative: false,
-    completedMilestones: {
-      alignment: true,
-    },
-  }),
-  createEvent({
-    id: 4,
-    seriesNumber: "4/8",
     theme: "Painting",
     owner: "Patrice",
     eventDate: "2026-05-24",
     tentative: false,
   }),
   createEvent({
+    id: 4,
+    seriesNumber: "4/8",
+    theme: "Sunset Bike Ride",
+    owner: "",
+    eventDate: "2026-06-07",
+    tentative: false,
+  }),
+  createEvent({
     id: 5,
     seriesNumber: "5/8",
-    theme: "Social / Bingo",
-    owner: "Sandy",
-    eventDate: "2026-05-31",
-    tentative: true,
+    theme: "Board Games + Karaoke",
+    owner: "",
+    eventDate: "2026-06-28",
+    tentative: false,
   }),
   createEvent({
     id: 6,
     seriesNumber: "6/8",
     theme: "TBD",
-    owner: "TBD",
-    eventDate: "2026-06-07",
+    owner: "",
+    eventDate: "2026-07-19",
     tentative: true,
   }),
   createEvent({
     id: 7,
     seriesNumber: "7/8",
     theme: "TBD",
-    owner: "TBD",
-    eventDate: "2026-06-21",
-    tentative: false,
+    owner: "",
+    eventDate: "2026-08-09",
+    tentative: true,
   }),
   createEvent({
     id: 8,
     seriesNumber: "8/8",
     theme: "TBD",
-    owner: "TBD",
-    eventDate: "2026-06-28",
-    tentative: false,
+    owner: "",
+    eventDate: "2026-08-30",
+    tentative: true,
   }),
 ];
 

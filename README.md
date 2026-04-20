@@ -6,7 +6,8 @@ A sleek React dashboard for GetLoveYVR event planning, marketing coordination, a
 
 - Month calendar view for milestones and event days
 - Operations board with quick milestone toggles
-- Marketing workflow with owner and status filters
+- Event owner and task owner assignment in the selected-event workflow
+- Owner and status filters with editor-only write access through Firebase auth
 - GitHub Pages deployment via GitHub Actions
 
 ## Project Notes
@@ -28,3 +29,4 @@ npm run build
 - Keep `.env.production` in sync with `.env` for GitHub Pages builds.
 - Follow the step-by-step setup guide in `FIREBASE_SETUP.md`.
 - The dashboard is wired for public read access plus editor-only writes via Firebase Google sign-in.
+- The default editor email is `aluu.life@gmail.com`.
